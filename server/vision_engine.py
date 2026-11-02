@@ -65,17 +65,28 @@ HAND_CONNECTIONS = [
 class VisionEngine:
     def __init__(self, yolo_model_path: str = "yolov8n.pt", gesture_model_path: str = "gesture_recognizer.task"):
         print("[VisionEngine] Initializing YOLO and MediaPipe Gesture models...")
-        self.yolo = YOLO(yolo_model_path)
-        
-        base_options = python.BaseOptions(model_asset_path=gesture_model_path)
-        options = vision.GestureRecognizerOptions(
-            base_options=base_options,
-            num_hands=2,
-            min_hand_detection_confidence=0.5,
-            min_hand_presence_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
-        self.gesture_recognizer = vision.GestureRecognizer.create_from_options(options)
+        self.yolo = None
+        self.gesture_recognizer = None
+
+        try:
+            self.yolo = YOLO(yolo_model_path)
+            print("[VisionEngine] YOLO model loaded.")
+        except Exception as e:
+            print(f"[VisionEngine] YOLO init note: {e}")
+
+        try:
+            base_options = python.BaseOptions(model_asset_path=gesture_model_path)
+            options = vision.GestureRecognizerOptions(
+                base_options=base_options,
+                num_hands=2,
+                min_hand_detection_confidence=0.5,
+                min_hand_presence_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+            self.gesture_recognizer = vision.GestureRecognizer.create_from_options(options)
+            print("[VisionEngine] MediaPipe Gesture Recognizer loaded.")
+        except Exception as e:
+            print(f"[VisionEngine] MediaPipe Gesture notice (running headless): {e}")
 
         # Rolling state
         self.last_detection_time = 0.0
@@ -83,7 +94,7 @@ class VisionEngine:
         self.last_detected_objects: List[str] = []
         self.last_detected_gestures: List[str] = []
         self.last_summary = "No visual targets detected yet."
-        print("[VisionEngine] Vision models loaded successfully!")
+        print("[VisionEngine] VisionEngine ready!")
 
     def _refine_custom_gestures(self, landmarks_list, standard_gesture: str) -> str:
         """
@@ -220,7 +231,7 @@ class VisionEngine:
                 print(f"[VisionEngine] YOLO error: {e}")
 
         # 3. Run MediaPipe Hand Gesture Recognition
-        if detect_gestures:
+        if detect_gestures and self.gesture_recognizer:
             try:
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)

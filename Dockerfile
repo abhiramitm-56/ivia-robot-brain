@@ -4,12 +4,17 @@
 
 FROM python:3.11-slim
 
-# Install system audio, vision, and networking libraries
+# Install system audio, vision, and OpenGL/EGL runtime libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     libgl1 \
+    libegl1 \
+    libgles2 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
