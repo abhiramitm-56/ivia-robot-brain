@@ -1,0 +1,14 @@
+.venv/
+env/
+**/env/
+**/venv/
+**/models/
+*.onnx
+*.zip
+*.dll
+*.pyd
+*.wav
+*.mp3
+__pycache__/
+*.pyc
+.env

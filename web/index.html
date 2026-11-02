@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IVIA — Humanoid Companion Interaction Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Background Ambient Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-grid"></div>
+
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="header">
+            <div class="brand">
+                <div class="brand-logo">
+                    <span class="logo-core"></span>
+                    <span class="logo-ring"></span>
+                </div>
+                <div class="brand-text">
+                    <h1>IVIA</h1>
+                    <span class="subtitle">Humanoid Companion AI</span>
+                </div>
+            </div>
+
+            <div class="header-status">
+                <div class="status-pill" id="esp32Pill">
+                    <span class="status-dot disconnected" id="esp32Dot"></span>
+                    <span class="status-label" id="esp32Label">ESP32 Offline</span>
+                </div>
+                <div class="status-pill" id="serverPill">
+                    <span class="status-dot connected" id="serverDot"></span>
+                    <span class="status-label" id="serverLabel">Brain Online</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Left Sidebar / Robot Persona & Diagnostics -->
+            <aside class="sidebar">
+                <div class="robot-card glass-panel">
+                    <div class="avatar-container">
+                        <div class="avatar-ring pulse-anim" id="avatarRing"></div>
+                        <div class="avatar-core">
+                            <svg viewBox="0 0 100 100" class="robot-face-svg">
+                                <defs>
+                                    <linearGradient id="cyberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#00f2fe" />
+                                        <stop offset="100%" stop-color="#4facfe" />
+                                    </linearGradient>
+                                </defs>
+                                <!-- Robot Visor & Eyes -->
+                                <rect x="20" y="32" width="60" height="36" rx="18" fill="#111827" stroke="url(#cyberGrad)" stroke-width="2"/>
+                                <circle cx="38" cy="50" r="6" fill="#00f2fe" class="eye-glow eye-left"/>
+                                <circle cx="62" cy="50" r="6" fill="#00f2fe" class="eye-glow eye-right"/>
+                                <path d="M42 60 Q50 63 58 60" stroke="#00f2fe" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <h2 class="robot-title">IVIA</h2>
+                    <p class="robot-role">Autonomous Humanoid Companion</p>
+                    <div class="robot-creator-badge">Autonomous Robot Node</div>
+
+                    <!-- State Indicator -->
+                    <div class="state-container">
+                        <span class="state-badge idle" id="robotStateBadge">STANDBY / IDLE</span>
+                    </div>
+
+                    <!-- Audio Visualizer Canvas -->
+                    <div class="visualizer-box">
+                        <canvas id="waveformCanvas" width="280" height="70"></canvas>
+                        <div class="viz-label">AUDIO FREQUENCY &bull; I2S BUS</div>
+                    </div>
+
+                    <!-- Hardware Spec Quick View -->
+                    <div class="specs-list">
+                        <div class="spec-item">
+                            <span class="spec-key">Main Board</span>
+                            <span class="spec-val">ESP32-S3 N16R8</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-key">Microphone</span>
+                            <span class="spec-val">INMP441 (41,42,2)</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-key">Speaker Amp</span>
+                            <span class="spec-val">MAX98357A (1,14,21)</span>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-key">Camera Sensor</span>
+                            <span class="spec-val">OV3660 (8MB PSRAM)</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Panel: Mode Navigation & Interactive Screen -->
+            <section class="interaction-zone glass-panel">
+                <!-- Navigation Tabs: Mode Selector -->
+                <div class="mode-tabs">
+                    <button class="tab-btn active" id="tabQA" onclick="switchMode('general_qa')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        Section 1: General Q&amp;A
+                    </button>
+                    <button class="tab-btn" id="tabVision" onclick="switchMode('object_detection')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+                        Section 2: Object Detection (ESP32-S3)
+                    </button>
+                </div>
+
+                <!-- MODE 1: General Q&A Chat & Live Audio Feed -->
+                <div class="mode-panel active" id="panelQA">
+                    <!-- Quick Suggestions -->
+                    <div class="quick-prompts">
+                        <button class="prompt-chip" onclick="sendPrompt('Hello')">
+                            &ldquo;Hello&rdquo;
+                        </button>
+                        <button class="prompt-chip" onclick="sendPrompt('Who are you?')">
+                            &ldquo;Who are you?&rdquo;
+                        </button>
+                        <button class="prompt-chip" onclick="sendPrompt('Introduce yourself')">
+                            &ldquo;Introduce yourself&rdquo;
+                        </button>
+                        <button class="prompt-chip" onclick="sendPrompt('Tell me about the solar system')">
+                            &ldquo;Tell me about the solar system&rdquo;
+                        </button>
+                        <button class="prompt-chip" onclick="sendPrompt('What makes humanoid robotics exciting?')">
+                            &ldquo;Humanoid robotics&rdquo;
+                        </button>
+                    </div>
+
+                    <!-- Transcript Stream -->
+                    <div class="chat-history" id="chatHistory">
+                        <div class="chat-bubble ivia">
+                            <div class="bubble-header">
+                                <span class="speaker-name">IVIA</span>
+                                <span class="bubble-time">SYSTEM READY</span>
+                            </div>
+                            <div class="bubble-text">
+                                Hello! I am IVIA. You can talk to me directly through your INMP441 microphone, or type your question below. I am ready to answer anything in the world!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input Bar -->
+                    <div class="chat-input-row">
+                        <input type="text" id="manualInput" placeholder="Type a question or speak into your INMP441 mic..." onkeydown="handleInputKey(event)">
+                        <button class="btn-send" onclick="sendManualInput()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                            <span>Send</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MODE 2: Real-Time Object & Gesture Detection Viewfinder -->
+                <div class="mode-panel" id="panelVision">
+                    <!-- Vision Toolbar -->
+                    <div class="vision-toolbar">
+                        <div class="vision-source-group">
+                            <span class="toolbar-label">INPUT SOURCE:</span>
+                            <div class="source-pills">
+                                <button class="source-btn active" id="srcWebcam" onclick="setVisionSource('webcam')">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                    WebCam (Laptop/USB)
+                                </button>
+                                <button class="source-btn" id="srcESP32" onclick="setVisionSource('esp32')">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+                                    ESP32-S3 (OV3660)
+                                </button>
+                                <button class="source-btn" id="btnFlipCam" onclick="toggleCameraFlip()" title="Flip image 180 degrees (right-side up)">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"/></svg>
+                                    Flip 180°
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- ESP32 Host input (visible when ESP32 selected) -->
+                        <div class="esp32-ip-box hidden" id="esp32IpBox">
+                            <input type="text" id="esp32CamIp" placeholder="ESP32 IP e.g. 192.168.29.120" value="">
+                        </div>
+
+                        <!-- Detection Category Filter Toggles -->
+                        <div class="detection-filters">
+                            <label class="filter-chip active" id="filterPersons">
+                                <input type="checkbox" id="chkPersons" checked onchange="toggleFilter('persons')">
+                                <span>👤 Persons</span>
+                            </label>
+                            <label class="filter-chip active" id="filterObjects">
+                                <input type="checkbox" id="chkObjects" checked onchange="toggleFilter('objects')">
+                                <span>📱 Small Things</span>
+                            </label>
+                            <label class="filter-chip active" id="filterGestures">
+                                <input type="checkbox" id="chkGestures" checked onchange="toggleFilter('gestures')">
+                                <span>🖐️ Hand Gestures</span>
+                            </label>
+                        </div>
+
+                        <!-- Start/Stop Stream Button -->
+                        <button class="btn-toggle-stream" id="btnToggleVision" onclick="toggleVisionStream()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="streamIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            <span id="streamBtnText">Start Camera Feed</span>
+                        </button>
+                    </div>
+
+                    <div class="vision-stage">
+                        <div class="camera-viewport" id="cameraViewport">
+                            <div class="hud-corner top-left"></div>
+                            <div class="hud-corner top-right"></div>
+                            <div class="hud-corner bottom-left"></div>
+                            <div class="hud-corner bottom-right"></div>
+                            <div class="hud-crosshair"></div>
+
+                            <!-- Live Telemetry Top HUD -->
+                            <div class="hud-telemetry" id="hudTelemetry">
+                                <div class="hud-item"><span class="hud-dot live" id="hudLiveDot"></span><span id="hudStatus">STANDBY</span></div>
+                                <div class="hud-item">FPS: <span id="hudFps">--</span></div>
+                                <div class="hud-item">RES: <span id="hudRes">640x480</span></div>
+                                <div class="hud-item hud-engine">YOLOv8 + MediaPipe</div>
+                            </div>
+
+                            <!-- Real-time Active Gesture Banner -->
+                            <div class="hud-gesture-banner hidden" id="hudGestureBanner">
+                                <span class="gesture-icon" id="hudGestureIcon">🖐️</span>
+                                <span class="gesture-name" id="hudGestureName">Open Palm</span>
+                                <span class="gesture-conf" id="hudGestureConf">95%</span>
+                            </div>
+
+                            <!-- Feed Placeholder (when stopped) -->
+                            <div class="feed-placeholder" id="feedPlaceholder">
+                                <div class="vision-loader-ring"></div>
+                                <h3>Real-Time Vision &amp; Gesture Detection</h3>
+                                <p>Detect persons, small everyday objects (cell phones, cups, bottles, remotes, etc.), and hand gestures in real time.</p>
+                                <button class="btn-activate-vision" onclick="toggleVisionStream()">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                    Activate Camera Feed
+                                </button>
+                                <div class="chip-badge mt-12">YOLOv8 &bull; MediaPipe 21-Landmark Gestures &bull; OV3660 Ready</div>
+                            </div>
+
+                            <!-- Video Elements -->
+                            <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
+                            <canvas id="visionCanvas" class="vision-display-canvas hidden"></canvas>
+                            <img id="cameraStreamImg" class="camera-stream hidden" alt="ESP32 Camera Stream">
+                        </div>
+
+                        <!-- Detected Objects & Gestures List -->
+                        <div class="detections-sidebar glass-panel">
+                            <div class="sidebar-header-row">
+                                <h3>Target Log &bull; Live Telemetry</h3>
+                                <span class="badge-live-count" id="badgeTotalTargets">0 Targets</span>
+                            </div>
+
+                            <!-- KPI Counters -->
+                            <div class="vision-kpis">
+                                <div class="kpi-card person-kpi">
+                                    <span class="kpi-num" id="kpiPersons">0</span>
+                                    <span class="kpi-title">Persons</span>
+                                </div>
+                                <div class="kpi-card object-kpi">
+                                    <span class="kpi-num" id="kpiObjects">0</span>
+                                    <span class="kpi-title">Small Things</span>
+                                </div>
+                                <div class="kpi-card gesture-kpi">
+                                    <span class="kpi-num" id="kpiGestures">0</span>
+                                    <span class="kpi-title">Gestures</span>
+                                </div>
+                            </div>
+
+                            <!-- Detection List Cards -->
+                            <div class="detection-list" id="detectionList">
+                                <div class="detection-empty" id="detectionEmpty">
+                                    <span>Waiting for camera feed activation...</span>
+                                </div>
+                            </div>
+
+                            <!-- Quick Voice Query Prompts -->
+                            <div class="vision-actions">
+                                <span class="actions-label">Ask IVIA About What She Sees:</span>
+                                <div class="actions-grid">
+                                    <button class="vision-action-btn" onclick="askIviaVision('What do you see right now?')">
+                                        &ldquo;What do you see?&rdquo;
+                                    </button>
+                                    <button class="vision-action-btn" onclick="askIviaVision('What am I holding in my hand?')">
+                                        &ldquo;What am I holding?&rdquo;
+                                    </button>
+                                    <button class="vision-action-btn" onclick="askIviaVision('What hand gesture am I showing you?')">
+                                        &ldquo;What gesture am I showing?&rdquo;
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
