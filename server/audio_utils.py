@@ -56,12 +56,42 @@ def pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int = SAMPLE_RATE, channels: 
 def decode_audio_to_pcm16(audio_bytes: bytes, target_sample_rate: int = SAMPLE_RATE) -> bytes:
     """
     Decode MP3/WAV audio bytes into raw 16-bit signed mono PCM at target sample rate.
-    Uses soundfile or miniaudio with standard wave fallback.
+    Uses FFmpeg CLI (in container), soundfile + numpy resampling, or miniaudio.
     """
     if not audio_bytes:
         return b""
 
-    # Try miniaudio first if installed
+    # 1. Try FFmpeg CLI (Installed in Linux container - studio quality 16kHz resampling)
+    try:
+        import subprocess
+        proc = subprocess.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-f", "s16le", "-ac", "1", "-ar", str(target_sample_rate), "pipe:1"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        pcm_out, _ = proc.communicate(input=audio_bytes, timeout=10)
+        if pcm_out and len(pcm_out) > 0:
+            return pcm_out
+    except Exception:
+        pass
+
+    # 2. Try soundfile with fast pure numpy resampling (No scipy required)
+    if sf is not None:
+        try:
+            audio_io = io.BytesIO(audio_bytes)
+            data, sr = sf.read(audio_io, dtype="int16")
+            if len(data.shape) > 1:
+                data = data.mean(axis=1).astype(np.int16)
+            if sr != target_sample_rate:
+                num_samples = int(len(data) * target_sample_rate / sr)
+                orig_indices = np.linspace(0, len(data) - 1, num_samples)
+                data = np.interp(orig_indices, np.arange(len(data)), data).astype(np.int16)
+            return data.tobytes()
+        except Exception:
+            pass
+
+    # 3. Try miniaudio if installed
     if miniaudio is not None:
         try:
             decoded = miniaudio.decode(
@@ -74,25 +104,7 @@ def decode_audio_to_pcm16(audio_bytes: bytes, target_sample_rate: int = SAMPLE_R
         except Exception:
             pass
 
-    # Try soundfile
-    if sf is not None:
-        try:
-            audio_io = io.BytesIO(audio_bytes)
-            data, sr = sf.read(audio_io, dtype="int16")
-            if len(data.shape) > 1:
-                data = data.mean(axis=1).astype(np.int16)
-            if sr != target_sample_rate:
-                try:
-                    import scipy.signal
-                    num_samples = int(len(data) * target_sample_rate / sr)
-                    data = scipy.signal.resample(data, num_samples).astype(np.int16)
-                except Exception:
-                    pass
-            return data.tobytes()
-        except Exception:
-            pass
-
-    # Fallback if standard WAV
+    # 4. Fallback if standard WAV
     try:
         with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
             return wf.readframes(wf.getnframes())
