@@ -94,6 +94,20 @@ class LLMEngine:
         ]
         return any(re.search(pat, q) for pat in patterns)
 
+    def _is_do_you_know_query(self, query: str) -> bool:
+        """
+        Check if user asked a question starting with or containing 'do you know'.
+        """
+        q = query.lower().strip()
+        patterns = [
+            r"^do\s+you\s+know\b",
+            r"^do\s+u\s+know\b",
+            r"\bdo\s+you\s+know\b",
+            r"\bdo\s+u\s+know\b",
+            r"^can\s+you\s+tell\s+me\s+if\s+you\s+know\b"
+        ]
+        return any(re.search(pat, q) for pat in patterns)
+
     def _is_nextgenpro_location_query(self, query: str) -> bool:
         """
         Check if the user is asking about NextGenPro's location, address, or where it is.
@@ -134,6 +148,9 @@ class LLMEngine:
         if not prompt:
             return ""
 
+        is_know_q = self._is_do_you_know_query(prompt)
+        know_prefix = "Yes, I know. " if is_know_q else ""
+
         # 1. Enforce Greeting query ("Hello" -> "I am IVIA, how can I assist you?")
         if self._is_greeting_query(prompt):
             print(f"[LLM] Triggered Greeting Response: '{GREETING_RESPONSE}'")
@@ -146,13 +163,15 @@ class LLMEngine:
 
         # 3. NextGenPro location query
         if self._is_nextgenpro_location_query(prompt):
-            print(f"[LLM] Triggered NextGenPro Location Response: '{NEXTGENPRO_LOCATION_RESPONSE}'")
-            return NEXTGENPRO_LOCATION_RESPONSE
+            resp = f"{know_prefix}{NEXTGENPRO_LOCATION_RESPONSE}"
+            print(f"[LLM] Triggered NextGenPro Location Response: '{resp}'")
+            return resp
 
         # 4. NextGenPro general query
         if self._is_nextgenpro_query(prompt):
-            print(f"[LLM] Triggered NextGenPro Response: '{NEXTGENPRO_RESPONSE}'")
-            return NEXTGENPRO_RESPONSE
+            resp = f"{know_prefix}{NEXTGENPRO_RESPONSE}"
+            print(f"[LLM] Triggered NextGenPro Response: '{resp}'")
+            return resp
 
         # 5. Intercept isolated corporate tokens from noise hallucinations (prevent lecture responses)
         clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
@@ -192,8 +211,8 @@ class LLMEngine:
                         temperature=0.6
                     )
                     answer = response.choices[0].message.content.strip()
-                    # Clean up formatting for spoken delivery
-                    answer = self._clean_for_speech(answer)
+                    # Clean up formatting for spoken delivery and ensure 'Yes, I know' prefix if asked
+                    answer = self._finalize_answer(answer, is_know_q)
                     self.conversation_history.append({"role": "assistant", "content": answer})
                     return answer
                 except Exception as e:
@@ -216,7 +235,7 @@ class LLMEngine:
                             parts = candidates[0]['content'].get('parts', [])
                             if parts:
                                 answer = parts[0].get('text', '').strip()
-                                answer = self._clean_for_speech(answer)
+                                answer = self._finalize_answer(answer, is_know_q)
                                 self.conversation_history.append({"role": "assistant", "content": answer})
                                 return answer
                     else:
@@ -234,14 +253,23 @@ class LLMEngine:
                     temperature=0.7
                 )
                 answer = response.choices[0].message.content.strip()
-                answer = self._clean_for_speech(answer)
+                answer = self._finalize_answer(answer, is_know_q)
                 self.conversation_history.append({"role": "assistant", "content": answer})
                 return answer
             except Exception as e:
                 print(f"[LLM - OpenAI] Request failed: {e}")
 
         # 7. Offline Fallback if API keys aren't added yet
-        return self._offline_fallback(prompt, visual_context)
+        offline_resp = self._offline_fallback(prompt, visual_context)
+        return self._finalize_answer(offline_resp, is_know_q)
+
+    def _finalize_answer(self, text: str, is_know_q: bool) -> str:
+        clean = self._clean_for_speech(text)
+        if is_know_q:
+            low = clean.lower()
+            if not low.startswith("yes, i know") and not low.startswith("yes i know"):
+                clean = f"Yes, I know. {clean}"
+        return clean
 
     def _clean_for_speech(self, text: str) -> str:
         text = text.replace("\u2011", "-").replace("\u2013", "-").replace("\u2014", "-")
