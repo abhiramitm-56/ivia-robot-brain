@@ -51,7 +51,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # LLM Models
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
@@ -82,6 +82,6 @@ CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
 # Voice Activity Detection (VAD)
-SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 600))  # RMS energy threshold for speech trigger
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.9)) # Seconds of silence to trigger response
+SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 650))  # RMS energy threshold for speech trigger
+SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.6)) # Seconds of silence to trigger response
 MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
