@@ -31,6 +31,7 @@ COPY yolov8n.pt /app/yolov8n.pt
 COPY gesture_recognizer.task /app/gesture_recognizer.task
 
 ENV PORT=8000
+ENV GROQ_MODEL=qwen/qwen3.8-27b
 EXPOSE 8000
 
 CMD ["sh", "-c", "uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

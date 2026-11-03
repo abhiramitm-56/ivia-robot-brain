@@ -137,9 +137,9 @@ class LLMEngine:
 
         messages = [{"role": "system", "content": system_content}] + history_messages
 
-        # 4. Query Groq (Ultra-fast LLM response < 200ms)
+        # 4. Query Groq (Ultra-fast LLM response < 500ms)
         if self.groq_client:
-            candidate_models = [GROQ_MODEL] + [m for m in ["llama-3.1-8b-instant", "llama3-8b-8192", "qwen/qwen-2.5-32b", "openai/gpt-oss-120b"] if m != GROQ_MODEL]
+            candidate_models = [GROQ_MODEL] + [m for m in ["qwen/qwen3.8-27b", "allam-2-7b", "openai/gpt-oss-120b"] if m != GROQ_MODEL]
             for model_candidate in candidate_models:
                 try:
                     response = self.groq_client.chat.completions.create(
