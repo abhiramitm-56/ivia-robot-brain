@@ -25,6 +25,7 @@ IDENTITY_RESPONSE = "I am IVIA, your humanoid companion developed by NextGenPro 
 GREETING_RESPONSE = "I am IVIA, how can I assist you?"
 NEXTGENPRO_RESPONSE = "NextGenPro, built on more than 16 years of industry experience, NextGenPro delivers enterprise software, AI, Robotics, IoT, and digital solutions that empower businesses to innovate, transform, and grow. NextGenPro's location is JR Complex, Near Palarivattom Metro Station, Ernakulam."
 NEXTGENPRO_LOCATION_RESPONSE = "NextGenPro is located at JR Complex, Near Palarivattom Metro Station, Ernakulam."
+KERALA_CM_RESPONSE = "The Chief Minister of Kerala is V. D. Satheesan."
 
 SYSTEM_PROMPT = f"""You are {ROBOT_NAME}, an interactive humanoid companion robot developed by NextGenPro Innovations and EduPark Private Limited.
 
@@ -40,6 +41,8 @@ CRITICAL RULES:
    "{NEXTGENPRO_RESPONSE}" (prefixed with "Yes, I know. " if asked "Do you know...").
 6. When asked "Where is NextGenPro?", "Where is NextGenPro located?", "What is NextGenPro's location?", or about its office address, you MUST answer:
    "{NEXTGENPRO_LOCATION_RESPONSE}" (prefixed with "Yes, I know. " if asked "Do you know...").
+7. When asked "Who is the Chief Minister of Kerala?", "Who is the CM of Kerala?", or any question about the Chief Minister of Kerala, you MUST answer:
+   "{KERALA_CM_RESPONSE}" (prefixed with "Yes, I know. " if asked "Do you know...").
 
 DOMAIN EXPERTISE - INDIA & KERALA:
 7. ENCYCLOPEDIC KNOWLEDGE OF INDIA:

@@ -7,6 +7,7 @@ from server.config import (
     GREETING_RESPONSE,
     NEXTGENPRO_RESPONSE,
     NEXTGENPRO_LOCATION_RESPONSE,
+    KERALA_CM_RESPONSE,
     GROQ_API_KEY,
     OPENAI_API_KEY,
     GEMINI_API_KEY,
@@ -139,6 +140,15 @@ class LLMEngine:
         ]
         return any(re.search(pat, q) for pat in patterns)
 
+    def _is_kerala_cm_query(self, query: str) -> bool:
+        """
+        Check if user asked about the Chief Minister of Kerala.
+        """
+        q = query.lower().strip()
+        has_kerala = "kerala" in q
+        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q
+        return has_kerala and has_cm
+
     def generate_response(self, user_prompt: str, visual_context: str = None) -> str:
         """
         Generate answer for user prompt.
@@ -161,13 +171,19 @@ class LLMEngine:
             print(f"[LLM] Triggered Identity Response: '{IDENTITY_RESPONSE}'")
             return IDENTITY_RESPONSE
 
-        # 3. NextGenPro location query
+        # 3. Kerala CM query
+        if self._is_kerala_cm_query(prompt):
+            resp = f"{know_prefix}{KERALA_CM_RESPONSE}"
+            print(f"[LLM] Triggered Kerala CM Response: '{resp}'")
+            return resp
+
+        # 4. NextGenPro location query
         if self._is_nextgenpro_location_query(prompt):
             resp = f"{know_prefix}{NEXTGENPRO_LOCATION_RESPONSE}"
             print(f"[LLM] Triggered NextGenPro Location Response: '{resp}'")
             return resp
 
-        # 4. NextGenPro general query
+        # 5. NextGenPro general query
         if self._is_nextgenpro_query(prompt):
             resp = f"{know_prefix}{NEXTGENPRO_RESPONSE}"
             print(f"[LLM] Triggered NextGenPro Response: '{resp}'")
