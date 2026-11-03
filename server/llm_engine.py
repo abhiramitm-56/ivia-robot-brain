@@ -5,6 +5,8 @@ from server.config import (
     SYSTEM_PROMPT,
     IDENTITY_RESPONSE,
     GREETING_RESPONSE,
+    NEXTGENPRO_RESPONSE,
+    NEXTGENPRO_LOCATION_RESPONSE,
     GROQ_API_KEY,
     OPENAI_API_KEY,
     GEMINI_API_KEY,
@@ -92,6 +94,37 @@ class LLMEngine:
         ]
         return any(re.search(pat, q) for pat in patterns)
 
+    def _is_nextgenpro_location_query(self, query: str) -> bool:
+        """
+        Check if the user is asking about NextGenPro's location, address, or where it is.
+        """
+        q = query.lower().strip()
+        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q
+        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located"]
+        return has_ngp and any(w in q for w in loc_words)
+
+    def _is_nextgenpro_query(self, query: str) -> bool:
+        """
+        Check if the user is asking about NextGenPro.
+        """
+        q = query.lower().strip()
+        patterns = [
+            r"\bwhat is nextgenpro\b",
+            r"\bwhat is next gen pro\b",
+            r"\btell me about nextgenpro\b",
+            r"\btell me about next gen pro\b",
+            r"\babout nextgenpro\b",
+            r"\babout next gen pro\b",
+            r"\bwho is nextgenpro\b",
+            r"\bwho is next gen pro\b",
+            r"\bnextgenpro innovations\b",
+            r"\bwhat does nextgenpro do\b",
+            r"\bwhat does next gen pro do\b",
+            r"\bnextgenpro\b",
+            r"\bnext gen pro\b"
+        ]
+        return any(re.search(pat, q) for pat in patterns)
+
     def generate_response(self, user_prompt: str, visual_context: str = None) -> str:
         """
         Generate answer for user prompt.
@@ -111,9 +144,19 @@ class LLMEngine:
             print(f"[LLM] Triggered Identity Response: '{IDENTITY_RESPONSE}'")
             return IDENTITY_RESPONSE
 
-        # 3. Intercept isolated corporate tokens from noise hallucinations (prevent lecture responses)
+        # 3. NextGenPro location query
+        if self._is_nextgenpro_location_query(prompt):
+            print(f"[LLM] Triggered NextGenPro Location Response: '{NEXTGENPRO_LOCATION_RESPONSE}'")
+            return NEXTGENPRO_LOCATION_RESPONSE
+
+        # 4. NextGenPro general query
+        if self._is_nextgenpro_query(prompt):
+            print(f"[LLM] Triggered NextGenPro Response: '{NEXTGENPRO_RESPONSE}'")
+            return NEXTGENPRO_RESPONSE
+
+        # 5. Intercept isolated corporate tokens from noise hallucinations (prevent lecture responses)
         clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
-        if clean_p in ["edupark", "edupark private limited", "nextgenpro", "nextgenpro innovations", "ivia"]:
+        if clean_p in ["edupark", "edupark private limited", "ivia"]:
             print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
             return GREETING_RESPONSE
 
