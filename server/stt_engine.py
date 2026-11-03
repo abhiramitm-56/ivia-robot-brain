@@ -88,7 +88,7 @@ class STTEngine:
         audio_file.name = "audio.wav"
 
         # 1. Try Groq STT (Extremely fast, < 300ms)
-        whisper_context = "IVIA, humanoid companion robot by NextGenPro and EduPark. Conversational voice assistance."
+        whisper_context = "IVIA, humanoid companion robot by NextGenPro and EduPark. India, Kerala, Kochi, Ernakulam, Palarivattom, Thiruvananthapuram, Kozhikode. Conversational voice assistance."
         if self.groq_client:
             try:
                 response = self.groq_client.audio.transcriptions.create(
