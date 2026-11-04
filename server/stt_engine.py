@@ -87,11 +87,12 @@ class STTEngine:
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
-        # 1. Try Groq STT (Extremely fast, < 300ms, automatic language detection)
-        whisper_context = "IVIA, humanoid companion robot by NextGenPro and EduPark. India, Kerala, Kochi, Ernakulam, Palarivattom. Multilingual English, Malayalam, Hindi."
+        # 1. Try Groq STT (Extremely fast, < 300ms)
+        # Context prompt includes Malayalam and English to condition Whisper's tokenizer
+        whisper_context = "മലയാളം സംഭാഷണം, നമസ്കാരം, സുഖമാണോ. IVIA companion by NextGenPro and EduPark. Conversational speech in Malayalam, English, and Hindi."
         if self.groq_client:
             try:
-                # Omit language="en" so Whisper auto-detects Malayalam, Hindi, English, etc.
+                # First pass: Auto-detect language with multilingual prompt
                 response = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
@@ -101,8 +102,23 @@ class STTEngine:
                 text = response.text.strip()
                 cleaned = self.clean_transcript(text)
                 if cleaned:
-                    print(f"[STT - Groq] Transcribed: '{cleaned}'")
+                    print(f"[STT - Groq Auto] Transcribed: '{cleaned}'")
                     return cleaned
+
+                # Second pass (Malayalam Fallback): If auto-detect missed short Malayalam syllables, retry with language='ml'
+                audio_file.seek(0)
+                response_ml = self.groq_client.audio.transcriptions.create(
+                    model=GROQ_STT_MODEL,
+                    file=audio_file,
+                    language="ml",
+                    temperature=0.0,
+                    prompt="മലയാളം സംഭാഷണം, നമസ്കാരം"
+                )
+                text_ml = response_ml.text.strip()
+                cleaned_ml = self.clean_transcript(text_ml)
+                if cleaned_ml:
+                    print(f"[STT - Groq Malayalam Forced] Transcribed: '{cleaned_ml}'")
+                    return cleaned_ml
                 else:
                     return ""
             except Exception as e:

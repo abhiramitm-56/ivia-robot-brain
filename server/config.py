@@ -144,6 +144,6 @@ CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
 # Voice Activity Detection (VAD) - Tuned for Snappy Conversational Turn-Taking
-SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 650))  # RMS energy threshold for speech trigger
+SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger (450 ensures soft Malayalam/Hindi speech is detected)
 SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.45)) # 0.45s silence triggers instantaneous reply!
 MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
