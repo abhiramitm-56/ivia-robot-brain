@@ -4,10 +4,20 @@ from openai import OpenAI
 from server.config import (
     SYSTEM_PROMPT,
     IDENTITY_RESPONSE,
+    IDENTITY_RESPONSE_ML,
+    IDENTITY_RESPONSE_HI,
     GREETING_RESPONSE,
+    GREETING_RESPONSE_ML,
+    GREETING_RESPONSE_HI,
     NEXTGENPRO_RESPONSE,
+    NEXTGENPRO_RESPONSE_ML,
+    NEXTGENPRO_RESPONSE_HI,
     NEXTGENPRO_LOCATION_RESPONSE,
+    NEXTGENPRO_LOCATION_RESPONSE_ML,
+    NEXTGENPRO_LOCATION_RESPONSE_HI,
     KERALA_CM_RESPONSE,
+    KERALA_CM_RESPONSE_ML,
+    KERALA_CM_RESPONSE_HI,
     GROQ_API_KEY,
     OPENAI_API_KEY,
     GEMINI_API_KEY,
@@ -37,17 +47,28 @@ class LLMEngine:
             except Exception as e:
                 print(f"[LLM] OpenAI init error: {e}")
 
+    def _detect_lang(self, text: str) -> str:
+        """
+        Detects whether the prompt is Malayalam, Hindi, or English.
+        """
+        if any('\u0D00' <= c <= '\u0D7F' for c in text):
+            return "ml"
+        elif any('\u0900' <= c <= '\u097F' for c in text):
+            return "hi"
+        return "en"
+
     def _is_greeting_query(self, query: str) -> bool:
         """
-        Check if the user is saying hello or general greeting.
+        Check if the user is saying hello or general greeting in English, Malayalam, or Hindi.
         """
-        q = re.sub(r"[^\w\s]", "", query.lower()).strip()
-        greetings = [
-            "hello", "hi", "hey", "hello ivia", "hi ivia", "hey ivia",
-            "hello there", "hi there", "good morning", "good afternoon", "good evening",
-            "hey there", "greetings"
+        q = query.lower().strip()
+        patterns = [
+            r"^hello\b", r"^hi\b", r"^hey\b", r"^greetings\b", r"^good\s+morning\b",
+            r"^good\s+afternoon\b", r"^good\s+evening\b",
+            r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ",
+            r"नमस्ते", r"नमस्कार", r"प्रणाम", r"हेलो"
         ]
-        return q in greetings or q.startswith("hello ") or q.startswith("hi ") or q.startswith("hey ")
+        return any(re.search(pat, q) for pat in patterns)
 
     def _is_identity_query(self, query: str) -> bool:
         """
@@ -55,17 +76,12 @@ class LLMEngine:
         """
         q = query.lower().strip()
         patterns = [
-            r"\bwho are you\b",
-            r"\bintroduce yourself\b",
-            r"\bintroduce\b",
-            r"\bintroduction\b",
-            r"\bwhat is your name\b",
-            r"\bwho created you\b",
-            r"\bwho made you\b",
-            r"\bwho developed you\b",
-            r"\btell me about yourself\b",
-            r"\bwhat are you\b",
-            r"\byour name\b"
+            r"\bwho are you\b", r"\bintroduce yourself\b", r"\bintroduce\b", r"\bintroduction\b",
+            r"\bwhat is your name\b", r"\bwho created you\b", r"\bwho made you\b",
+            r"\bwho developed you\b", r"\btell me about yourself\b", r"\bwhat are you\b",
+            r"\byour name\b",
+            r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
+            r"तुम\s*कौन\s*हो", r"आप\s*कौन\s*हैं", r"तुम्हारा\s*नाम\s*क्या\s*है"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -97,15 +113,14 @@ class LLMEngine:
 
     def _is_do_you_know_query(self, query: str) -> bool:
         """
-        Check if user asked a question starting with or containing 'do you know'.
+        Check if user asked a question starting with or containing 'do you know' / 'അറിയാമോ' / 'क्या आप जानते हैं'.
         """
         q = query.lower().strip()
         patterns = [
-            r"^do\s+you\s+know\b",
-            r"^do\s+u\s+know\b",
-            r"\bdo\s+you\s+know\b",
-            r"\bdo\s+u\s+know\b",
-            r"^can\s+you\s+tell\s+me\s+if\s+you\s+know\b"
+            r"^do\s+you\s+know\b", r"^do\s+u\s+know\b", r"\bdo\s+you\s+know\b", r"\bdo\s+u\s+know\b",
+            r"^can\s+you\s+tell\s+me\s+if\s+you\s+know\b",
+            r"അറിയാമോ", r"നിനക്കറിയാമോ", r"നിങ്ങൾക്ക്\s*അറിയാമോ",
+            r"क्या\s*आप\s*जानते\s*हैं", r"क्या\s*तुम\s*जानते\s*हो", r"जानते\s*हो"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -114,8 +129,8 @@ class LLMEngine:
         Check if the user is asking about NextGenPro's location, address, or where it is.
         """
         q = query.lower().strip()
-        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q
-        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located"]
+        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q or "നെക്സ്റ്റ്ജെൻപ്രോ" in q or "നെക്സ്റ്റ്" in q or "नेक्स्टजेनप्रो" in q
+        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located", "എവിടെയാണ്", "എവിടെ", "സ്ഥലം", "ഓഫീസ്", "कहाँ", "पता", "कार्यालय"]
         return has_ngp and any(w in q for w in loc_words)
 
     def _is_nextgenpro_query(self, query: str) -> bool:
@@ -124,19 +139,13 @@ class LLMEngine:
         """
         q = query.lower().strip()
         patterns = [
-            r"\bwhat is nextgenpro\b",
-            r"\bwhat is next gen pro\b",
-            r"\btell me about nextgenpro\b",
-            r"\btell me about next gen pro\b",
-            r"\babout nextgenpro\b",
-            r"\babout next gen pro\b",
-            r"\bwho is nextgenpro\b",
-            r"\bwho is next gen pro\b",
-            r"\bnextgenpro innovations\b",
-            r"\bwhat does nextgenpro do\b",
-            r"\bwhat does next gen pro do\b",
-            r"\bnextgenpro\b",
-            r"\bnext gen pro\b"
+            r"\bwhat is nextgenpro\b", r"\bwhat is next gen pro\b", r"\btell me about nextgenpro\b",
+            r"\btell me about next gen pro\b", r"\babout nextgenpro\b", r"\babout next gen pro\b",
+            r"\bwho is nextgenpro\b", r"\bwho is next gen pro\b", r"\bnextgenpro innovations\b",
+            r"\bwhat does nextgenpro do\b", r"\bwhat does next gen pro do\b", r"\bnextgenpro\b",
+            r"\bnext gen pro\b",
+            r"നെക്സ്റ്റ്ജെൻപ്രോ", r"നെക്സ്റ്റ്\s*ജെൻ\s*പ്രോ", r"നെക്സ്റ്റ്ജെൻ",
+            r"नेक्स्टजेनप्रो"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -145,51 +154,64 @@ class LLMEngine:
         Check if user asked about the Chief Minister of Kerala.
         """
         q = query.lower().strip()
-        has_kerala = "kerala" in q
-        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q
-        return has_kerala and has_cm
+        has_kerala = "kerala" in q or "കേരള" in q or "केरल" in q
+        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q or "മുഖ്യമന്ത്രി" in q or "मुख्यमंत्री" in q
+        return (has_kerala and has_cm) or "മുഖ്യമന്ത്രി" in q
 
     def generate_response(self, user_prompt: str, visual_context: str = None) -> str:
         """
-        Generate answer for user prompt.
-        Handles greeting, identity enforcement, real-time vision questions, general Q&A, and conversational flow.
+        Generate answer for user prompt with multilingual intelligence.
         """
         prompt = user_prompt.strip()
         if not prompt:
             return ""
 
+        lang = self._detect_lang(prompt)
         is_know_q = self._is_do_you_know_query(prompt)
-        know_prefix = "Yes, I know. " if is_know_q else ""
 
-        # 1. Enforce Greeting query ("Hello" -> "I am IVIA, how can I assist you?")
+        know_prefix = ""
+        if is_know_q:
+            if lang == "ml":
+                know_prefix = "അതെ, എനിക്കറിയാം. "
+            elif lang == "hi":
+                know_prefix = "हाँ, मुझे पता है। "
+            else:
+                know_prefix = "Yes, I know. "
+
+        # 1. Enforce Greeting query
         if self._is_greeting_query(prompt):
-            print(f"[LLM] Triggered Greeting Response: '{GREETING_RESPONSE}'")
-            return GREETING_RESPONSE
+            resp = GREETING_RESPONSE_ML if lang == "ml" else (GREETING_RESPONSE_HI if lang == "hi" else GREETING_RESPONSE)
+            print(f"[LLM] Triggered Greeting Response ({lang}): '{resp}'")
+            return resp
 
         # 2. Enforce strict identity response
         if self._is_identity_query(prompt):
-            print(f"[LLM] Triggered Identity Response: '{IDENTITY_RESPONSE}'")
-            return IDENTITY_RESPONSE
+            resp = IDENTITY_RESPONSE_ML if lang == "ml" else (IDENTITY_RESPONSE_HI if lang == "hi" else IDENTITY_RESPONSE)
+            print(f"[LLM] Triggered Identity Response ({lang}): '{resp}'")
+            return resp
 
         # 3. Kerala CM query
         if self._is_kerala_cm_query(prompt):
-            resp = f"{know_prefix}{KERALA_CM_RESPONSE}"
-            print(f"[LLM] Triggered Kerala CM Response: '{resp}'")
+            base = KERALA_CM_RESPONSE_ML if lang == "ml" else (KERALA_CM_RESPONSE_HI if lang == "hi" else KERALA_CM_RESPONSE)
+            resp = f"{know_prefix}{base}"
+            print(f"[LLM] Triggered Kerala CM Response ({lang}): '{resp}'")
             return resp
 
         # 4. NextGenPro location query
         if self._is_nextgenpro_location_query(prompt):
-            resp = f"{know_prefix}{NEXTGENPRO_LOCATION_RESPONSE}"
-            print(f"[LLM] Triggered NextGenPro Location Response: '{resp}'")
+            base = NEXTGENPRO_LOCATION_RESPONSE_ML if lang == "ml" else (NEXTGENPRO_LOCATION_RESPONSE_HI if lang == "hi" else NEXTGENPRO_LOCATION_RESPONSE)
+            resp = f"{know_prefix}{base}"
+            print(f"[LLM] Triggered NextGenPro Location Response ({lang}): '{resp}'")
             return resp
 
         # 5. NextGenPro general query
         if self._is_nextgenpro_query(prompt):
-            resp = f"{know_prefix}{NEXTGENPRO_RESPONSE}"
-            print(f"[LLM] Triggered NextGenPro Response: '{resp}'")
+            base = NEXTGENPRO_RESPONSE_ML if lang == "ml" else (NEXTGENPRO_RESPONSE_HI if lang == "hi" else NEXTGENPRO_RESPONSE)
+            resp = f"{know_prefix}{base}"
+            print(f"[LLM] Triggered NextGenPro Response ({lang}): '{resp}'")
             return resp
 
-        # 5. Intercept isolated corporate tokens from noise hallucinations (prevent lecture responses)
+        # 6. Intercept isolated corporate tokens from noise hallucinations
         clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
         if clean_p in ["edupark", "edupark private limited", "ivia"]:
             print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
@@ -228,7 +250,7 @@ class LLMEngine:
                     )
                     answer = response.choices[0].message.content.strip()
                     # Clean up formatting for spoken delivery and ensure 'Yes, I know' prefix if asked
-                    answer = self._finalize_answer(answer, is_know_q)
+                    answer = self._finalize_answer(answer, is_know_q, lang)
                     self.conversation_history.append({"role": "assistant", "content": answer})
                     return answer
                 except Exception as e:
@@ -251,7 +273,7 @@ class LLMEngine:
                             parts = candidates[0]['content'].get('parts', [])
                             if parts:
                                 answer = parts[0].get('text', '').strip()
-                                answer = self._finalize_answer(answer, is_know_q)
+                                answer = self._finalize_answer(answer, is_know_q, lang)
                                 self.conversation_history.append({"role": "assistant", "content": answer})
                                 return answer
                     else:
@@ -269,7 +291,7 @@ class LLMEngine:
                     temperature=0.7
                 )
                 answer = response.choices[0].message.content.strip()
-                answer = self._finalize_answer(answer, is_know_q)
+                answer = self._finalize_answer(answer, is_know_q, lang)
                 self.conversation_history.append({"role": "assistant", "content": answer})
                 return answer
             except Exception as e:
@@ -277,14 +299,21 @@ class LLMEngine:
 
         # 7. Offline Fallback if API keys aren't added yet
         offline_resp = self._offline_fallback(prompt, visual_context)
-        return self._finalize_answer(offline_resp, is_know_q)
+        return self._finalize_answer(offline_resp, is_know_q, lang)
 
-    def _finalize_answer(self, text: str, is_know_q: bool) -> str:
+    def _finalize_answer(self, text: str, is_know_q: bool, lang: str = "en") -> str:
         clean = self._clean_for_speech(text)
         if is_know_q:
-            low = clean.lower()
-            if not low.startswith("yes, i know") and not low.startswith("yes i know"):
-                clean = f"Yes, I know. {clean}"
+            if lang == "ml":
+                if not clean.startswith("അതെ") and "എനിക്കറിയാം" not in clean[:30]:
+                    clean = f"അതെ, എനിക്കറിയാം. {clean}"
+            elif lang == "hi":
+                if not clean.startswith("हाँ") and "मुझे पता है" not in clean[:30]:
+                    clean = f"हाँ, मुझे पता है। {clean}"
+            else:
+                low = clean.lower()
+                if not low.startswith("yes, i know") and not low.startswith("yes i know"):
+                    clean = f"Yes, I know. {clean}"
         return clean
 
     def _clean_for_speech(self, text: str) -> str:

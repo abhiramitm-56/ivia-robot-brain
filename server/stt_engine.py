@@ -40,8 +40,8 @@ class STTEngine:
 
         t = text.strip()
 
-        # Reject transcripts with no alphanumeric words (e.g. '.', '...', '!')
-        if not re.search(r"[a-zA-Z0-9]", t):
+        # Reject transcripts with no readable words (e.g. '.', '...', '!')
+        if not re.search(r"[\w\u0D00-\u0D7F\u0900-\u097F\u0B80-\u0BFF]", t):
             return ""
 
         # Standalone hallucinated phrases produced by Whisper on silence or background noise
@@ -87,14 +87,14 @@ class STTEngine:
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
-        # 1. Try Groq STT (Extremely fast, < 300ms)
-        whisper_context = "IVIA, humanoid companion robot by NextGenPro and EduPark. India, Kerala, Kochi, Ernakulam, Palarivattom, Thiruvananthapuram, Kozhikode. Conversational voice assistance."
+        # 1. Try Groq STT (Extremely fast, < 300ms, automatic language detection)
+        whisper_context = "IVIA, humanoid companion robot by NextGenPro and EduPark. India, Kerala, Kochi, Ernakulam, Palarivattom. Multilingual English, Malayalam, Hindi."
         if self.groq_client:
             try:
+                # Omit language="en" so Whisper auto-detects Malayalam, Hindi, English, etc.
                 response = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
-                    language="en",
                     temperature=0.0,
                     prompt=whisper_context
                 )
@@ -108,14 +108,13 @@ class STTEngine:
             except Exception as e:
                 print(f"[STT - Groq] Transcription failed: {e}")
 
-        # 2. Try OpenAI Whisper
+        # 2. Try OpenAI Whisper (Fallback)
         if self.openai_client:
             try:
                 audio_file.seek(0)
                 response = self.openai_client.audio.transcriptions.create(
                     model=OPENAI_STT_MODEL,
                     file=audio_file,
-                    language="en",
                     prompt=whisper_context
                 )
                 text = response.text.strip()

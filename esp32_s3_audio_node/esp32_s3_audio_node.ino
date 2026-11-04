@@ -4,18 +4,21 @@
  * 
  * In Arduino IDE Tools Menu:
  *   - Board: "ESP32S3 Dev Module"
- *   - PSRAM: "OPI PSRAM"
+ *   - USB CDC On Boot: "Disabled"
+ *   - PSRAM: "Disabled"
+ *   - Flash Mode: "QIO 80MHz" (or "DIO 80MHz")
  *   - Flash Size: "16MB (128Mb)"
- *   - USB CDC On Boot: "Enabled"
  *   - Upload Speed: "921600"
  */
 
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include "driver/i2s.h"
 #include "config.h"
 
+WiFiMulti wifiMulti;
 WebSocketsClient webSocket;
 
 bool isConnectedToServer = false;
@@ -120,7 +123,8 @@ void playAudioChunk(uint8_t *payload, size_t length) {
             stereo_buf[j * 2 + 1] = s; // Right
         }
         size_t bytes_written = 0;
-        i2s_write(I2S_NUM_1, stereo_buf, count * 4, &bytes_written, portMAX_DELAY);
+        // Low-latency non-blocking write timeout (20ms) to ensure WebSockets network loop never starves
+        i2s_write(I2S_NUM_1, stereo_buf, count * 4, &bytes_written, pdMS_TO_TICKS(20));
     }
 }
 
@@ -131,7 +135,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
             isConnectedToServer = false;
-            Serial.println("[WS] Disconnected from Brain Server");
+            Serial.println("[WS] Disconnected from Brain Server. Retrying in background... (Note: Render Cloud takes ~30s if waking up)");
             break;
 
         case WStype_CONNECTED:
@@ -172,10 +176,11 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 // ========================================================
 // 5. Continuous Mic Streaming Task (Core 0)
+// Batched to 512 samples (32ms) to eliminate TLS buffer saturation
 // ========================================================
 void micStreamingTask(void *param) {
-    int32_t raw_buffer[256];
-    int16_t pcm16_buffer[256];
+    int32_t raw_buffer[512];
+    int16_t pcm16_buffer[512];
     size_t bytes_read = 0;
     unsigned long lastLog = 0;
 
@@ -199,7 +204,7 @@ void micStreamingTask(void *param) {
 
                 if (millis() - lastLog > 3000) {
                     lastLog = millis();
-                    Serial.printf("[Mic] Active (Peak: %d)\n", peak);
+                    Serial.printf("[Mic] Streaming Active (Peak: %d)\n", peak);
                 }
 
                 if (wsMutex && xSemaphoreTake(wsMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
@@ -217,8 +222,9 @@ void micStreamingTask(void *param) {
 // 6. Setup & Main Loop
 // ========================================================
 void setup() {
-    Serial.begin(115200);
     delay(1000);
+    Serial.begin(115200);
+    delay(500);
 
     Serial.println("\n=============================================");
     Serial.println("  IVIA Companion - Standalone Audio Node     ");
@@ -229,18 +235,25 @@ void setup() {
 
     if (psramFound()) {
         Serial.printf("[System] PSRAM Detected: %d bytes free\n", ESP.getFreePsram());
+    } else {
+        Serial.printf("[System] Internal SRAM: %d bytes free\n", ESP.getFreeHeap());
     }
 
     initI2SMicrophone();
     initI2SSpeaker();
 
-    // Connect to Wi-Fi
-    Serial.printf("[Wi-Fi] Connecting to %s", WIFI_SSID);
+    // Connect to Wi-Fi (Multi-AP Automatic Roaming)
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.setSleep(false); // Permanently disable modem sleep for uninterrupted connection
 
+    wifiMulti.addAP(WIFI_SSID_1, WIFI_PASSWORD_1);
+    if (strlen(WIFI_SSID_2) > 0) {
+        wifiMulti.addAP(WIFI_SSID_2, WIFI_PASSWORD_2);
+    }
+
+    Serial.println("[Wi-Fi] Scanning and connecting to available network...");
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+    while (wifiMulti.run() != WL_CONNECTED && attempts < 30) {
         delay(500);
         Serial.print(".");
         attempts++;
@@ -249,10 +262,24 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
         WiFi.setSleep(false);
         Serial.println("\n[Wi-Fi] Connected!");
+        Serial.printf("[Wi-Fi] Connected to: %s\n", WiFi.SSID().c_str());
         Serial.print("[Wi-Fi] IP Address: ");
         Serial.println(WiFi.localIP());
+
+        // Sync system clock via NTP (Required so SSL/TLS certificates pass date validation)
+        Serial.print("[NTP] Syncing clock for SSL");
+        configTime(0, 0, "pool.ntp.org", "time.google.com");
+        time_t now = time(nullptr);
+        int ntpWait = 0;
+        while (now < 1700000000 && ntpWait < 20) { // Year > Nov 2023
+            delay(250);
+            Serial.print(".");
+            now = time(nullptr);
+            ntpWait++;
+        }
+        Serial.println(" Synced!");
     } else {
-        Serial.println("\n[Wi-Fi] Connection failed. Retrying in background...");
+        Serial.println("\n[Wi-Fi] Still looking for network. Retrying in background...");
     }
 
     // Connect to Python Brain Server (Cloud WSS or Local WS)
@@ -264,7 +291,9 @@ void setup() {
     Serial.printf("[WS] Connecting (WS) to http://%s:%d%s\n", SERVER_HOST, SERVER_PORT, WS_PATH);
 #endif
     webSocket.onEvent(webSocketEvent);
-    webSocket.setReconnectInterval(3000);
+    webSocket.setReconnectInterval(3000); // Built-in smooth reconnection retry
+    // Keep-alive heartbeat: ping every 15s to keep Render Cloud proxy and Hotspot NAT alive
+    webSocket.enableHeartbeat(15000, 4000, 2);
 
     // Launch microphone task on Core 0
     xTaskCreatePinnedToCore(
@@ -281,19 +310,17 @@ void setup() {
 }
 
 void loop() {
+    // 1. Maintain Wi-Fi connection with auto-reconnect
+    if (wifiMulti.run() != WL_CONNECTED) {
+        delay(10);
+        return;
+    }
+
+    // 2. Drive WebSocket networking engine
     if (wsMutex && xSemaphoreTake(wsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         webSocket.loop();
         xSemaphoreGive(wsMutex);
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        static unsigned long lastWifiRetry = 0;
-        if (millis() - lastWifiRetry > 5000) {
-            lastWifiRetry = millis();
-            Serial.println("[Wi-Fi] Reconnecting...");
-            WiFi.reconnect();
-        }
-    }
-    delay(5);
+    delay(2);
 }
-

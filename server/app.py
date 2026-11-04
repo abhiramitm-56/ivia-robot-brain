@@ -76,14 +76,15 @@ async def stream_pcm_to_esp32(target_ws: WebSocket, pcm_bytes: bytes):
     """
     Stream PCM audio chunks to the ESP32 speaker.
     Can be cancelled instantly by asyncio if user interrupts (barge-in).
+    Uses 2048-byte chunks (64ms) to halve TLS packet load and eliminate buffer drops on mobile hotspots.
     """
     global speech_cooldown_until
     try:
         await target_ws.send_text(json.dumps({"event": "speaking_start"}))
-        chunk_size = 1024
+        chunk_size = 2048
         for i in range(0, len(pcm_bytes), chunk_size):
             await target_ws.send_bytes(pcm_bytes[i:i+chunk_size])
-            await asyncio.sleep(0.025)
+            await asyncio.sleep(0.050)
         await target_ws.send_text(json.dumps({"event": "speaking_end"}))
     except asyncio.CancelledError:
         print("[Audio Stream] Playback interrupted! Stopping physical speaker.")

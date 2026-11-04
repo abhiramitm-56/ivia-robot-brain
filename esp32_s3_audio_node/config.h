@@ -2,27 +2,30 @@
 #define CONFIG_H
 
 // ==========================================
-// 1. Wi-Fi Configuration
+// 1. Wi-Fi Configuration (Supports Multiple Networks)
+// The ESP32 will automatically connect to whichever is available!
 // ==========================================
-// Connect PC and ESP32 to the same Wi-Fi network / Hotspot:
-#define WIFI_SSID     "Abhirami"        // Your Wi-Fi / Hotspot SSID
-#define WIFI_PASSWORD "123454321"       // Your Wi-Fi / Hotspot Password
+#define WIFI_SSID_1     "Abhirami"        // Primary: Mobile Hotspot SSID
+#define WIFI_PASSWORD_1 "123454321"       // Primary: Mobile Hotspot Password
 
-// PC's local IP (if testing locally) OR your Cloud Domain (e.g. "ivia-brain.onrender.com" or "user-ivia.hf.space")
-#define SERVER_HOST   "10.35.199.251"   
-#define SERVER_PORT   8000              // 8000 for local PC, 443 for Cloud (Render / Hugging Face / Railway)
+#define WIFI_SSID_2     ""                // Secondary: Home/Office Wi-Fi (optional)
+#define WIFI_PASSWORD_2 ""                // Secondary: Home/Office Password (optional)
+
+// ==========================================
+// 2. Server Connection (Render Cloud - 24/7 Standalone)
+// ==========================================
+#define SERVER_HOST   "ivia-robot-brain.onrender.com"   
+#define SERVER_PORT   443              // Standard secure SSL port
 #define WS_PATH       "/ws/esp32"
-
-// Set to true when connecting to a Cloud server over HTTPS / WSS:
-#define USE_SSL       false             // false = local PC (HTTP/WS), true = Cloud (HTTPS/WSS)
+#define USE_SSL       true             // true for Render Cloud (WSS)
 
 // ==========================================
-// 2. Audio Configuration (16kHz 16-bit Mono)
+// 3. Audio Configuration (16kHz 16-bit Mono)
 // ==========================================
 #define SAMPLE_RATE   16000
 
 // ==========================================
-// 3. Audio Pinout for ESP32-S3-DEV-KIT-N16R8
+// 4. Audio Pinout for ESP32-S3-DEV-KIT-N16R8
 // Tested and verified against standard 44-pin DevKit header
 // ==========================================
 
@@ -44,4 +47,3 @@
 #define I2S_SPK_DIN   21   // Right Header, Pin 18 (DIN / Serial Data Out)
 
 #endif // CONFIG_H
-
