@@ -14,7 +14,7 @@
 // ==========================================
 // 2. Server Connection Configuration (Raspberry Pi 4 Brain)
 // ==========================================
-#define SERVER_HOST   "192.168.29.221"   // Raspberry Pi Local IP (e.g. from 'hostname -I')
+#define SERVER_HOST   "10.35.199.186"   // Raspberry Pi Local IP on Hotspot
 #define SERVER_PORT   8000              // Default Docker FastAPI port
 #define WS_PATH       "/ws/esp32"
 #define USE_SSL       false             // Direct high-speed local WebSocket (ws://)
