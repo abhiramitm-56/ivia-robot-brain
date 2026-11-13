@@ -17,6 +17,34 @@ from server.config import (
 class TTSEngine:
     def __init__(self, default_voice: str = TTS_VOICE):
         self.default_voice = default_voice
+        self._cache = {}
+
+    async def warm_cache(self):
+        """
+        Pre-warm high-frequency persona responses into RAM on startup.
+        Ensures greetings, identity, and location questions play back in 0ms!
+        """
+        from server.config import (
+            IDENTITY_RESPONSE, IDENTITY_RESPONSE_ML,
+            GREETING_RESPONSE, GREETING_RESPONSE_ML,
+            NEXTGENPRO_LOCATION_RESPONSE, NEXTGENPRO_LOCATION_RESPONSE_ML
+        )
+        prewarm_texts = [
+            GREETING_RESPONSE,
+            GREETING_RESPONSE_ML,
+            IDENTITY_RESPONSE,
+            IDENTITY_RESPONSE_ML,
+            NEXTGENPRO_LOCATION_RESPONSE,
+            NEXTGENPRO_LOCATION_RESPONSE_ML,
+            "Yes, I know.",
+            "അതെ, എനിക്കറിയാം."
+        ]
+        for t in prewarm_texts:
+            try:
+                await self.synthesize_to_pcm(t)
+            except Exception:
+                pass
+        print(f"[TTS Engine] Pre-warmed {len(self._cache)} core responses into memory for 0ms instant playback!")
 
     def detect_voice(self, text: str) -> str:
         """
@@ -64,6 +92,11 @@ class TTSEngine:
         spoken_text = self._apply_phonetic_fixes(text.strip())
         voice_to_use = self.detect_voice(spoken_text)
 
+        cache_key = f"{voice_to_use}_{spoken_text}_{TTS_RATE}"
+        if cache_key in self._cache:
+            print(f"[TTS Cache HIT] Instant 0ms playback for: '{spoken_text[:40]}...'")
+            return self._cache[cache_key]
+
         try:
             print(f"[TTS] Synthesizing speech using voice: {voice_to_use}")
             communicate = edge_tts.Communicate(
@@ -84,6 +117,8 @@ class TTSEngine:
 
             # Decode MP3 bytes into raw 16kHz 16-bit Mono PCM for ESP32 MAX98357A
             pcm_bytes = decode_audio_to_pcm16(bytes(mp3_buffer), target_sample_rate=SAMPLE_RATE)
+            if pcm_bytes:
+                self._cache[cache_key] = pcm_bytes
             print(f"[TTS] Synthesized {len(pcm_bytes)} PCM bytes ({len(pcm_bytes)/(SAMPLE_RATE*2):.1f}s audio)")
             return pcm_bytes
 

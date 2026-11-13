@@ -127,7 +127,7 @@ TTS_VOICE = os.getenv("TTS_VOICE", "en-US-AriaNeural")         # Default English
 TTS_VOICE_ML = os.getenv("TTS_VOICE_ML", "ml-IN-SobhanaNeural") # Malayalam (മലയാളം)
 TTS_VOICE_HI = os.getenv("TTS_VOICE_HI", "hi-IN-SwaraNeural")   # Hindi (हिंदी)
 TTS_VOICE_TA = os.getenv("TTS_VOICE_TA", "ta-IN-PallaviNeural") # Tamil (தமிழ்)
-TTS_RATE = os.getenv("TTS_RATE", "+0%")
+TTS_RATE = os.getenv("TTS_RATE", "+12%")
 TTS_VOLUME = os.getenv("TTS_VOLUME", "+0%")
 
 # Phonetic Replacements for Natural Speech Pronunciation:
@@ -143,7 +143,7 @@ SAMPLE_RATE = 16000          # 16kHz
 CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
-# Voice Activity Detection (VAD) - Tuned for Natural Multilingual Speech Cadence
+# Voice Activity Detection (VAD) - Ultra-Low Latency Conversational Turn-Taking
 SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.80)) # 0.80s silence prevents cutting off Malayalam words/phrases mid-sentence
-MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.40))
+SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.55)) # 0.55s silence gives snappy response without chopping words
+MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))

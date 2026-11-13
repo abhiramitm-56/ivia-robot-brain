@@ -52,6 +52,11 @@ if ENABLE_VISION:
     except Exception as e:
         print(f"[System] Vision Engine disabled: {e}")
 
+@app.on_event("startup")
+async def on_server_startup():
+    print("[System] Pre-warming TTS cache in background for 0ms voice latency...")
+    asyncio.create_task(tts_engine.warm_cache())
+
 # Connection pools
 esp32_connections: Set[WebSocket] = set()
 web_connections: Set[WebSocket] = set()

@@ -260,8 +260,8 @@ class LLMEngine:
                     response = self.groq_client.chat.completions.create(
                         model=model_candidate,
                         messages=messages,
-                        max_tokens=100,
-                        temperature=0.6
+                        max_tokens=45,
+                        temperature=0.4
                     )
                     answer = response.choices[0].message.content.strip()
                     # Clean up formatting for spoken delivery and ensure 'Yes, I know' prefix if asked
