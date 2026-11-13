@@ -31,7 +31,6 @@ from server.audio_utils import calculate_rms, pcm_to_wav_bytes
 from server.stt_engine import STTEngine
 from server.llm_engine import LLMEngine
 from server.tts_engine import TTSEngine
-from server.vision_engine import VisionEngine
 from fastapi.responses import FileResponse, StreamingResponse
 import httpx
 
@@ -41,7 +40,17 @@ app = FastAPI(title=f"{ROBOT_NAME} Brain Server")
 stt_engine = STTEngine()
 llm_engine = LLMEngine()
 tts_engine = TTSEngine()
-vision_engine = VisionEngine()
+
+# Optional Vision Engine (Disabled by default to save RAM and avoid PyTorch/GPU overhead on Pi)
+ENABLE_VISION = os.getenv("ENABLE_VISION", "false").lower() == "true"
+vision_engine = None
+if ENABLE_VISION:
+    try:
+        from server.vision_engine import VisionEngine
+        vision_engine = VisionEngine()
+        print("[System] Vision Engine loaded successfully.")
+    except Exception as e:
+        print(f"[System] Vision Engine disabled: {e}")
 
 # Connection pools
 esp32_connections: Set[WebSocket] = set()
@@ -219,7 +228,7 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
                                 await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text})
                                 
                                 # Process query through LLM with real-time visual sensor context
-                                visual_ctx = vision_engine.get_visual_context_summary()
+                                visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
                                 answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
                                 await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
 
@@ -296,7 +305,7 @@ async def web_websocket_endpoint(websocket: WebSocket):
                     await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text})
                     await set_state("processing")
 
-                    visual_ctx = vision_engine.get_visual_context_summary()
+                    visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
                     answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
                     await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
 
@@ -333,14 +342,17 @@ async def web_websocket_endpoint(websocket: WebSocket):
                 return_annotated = message.get("return_annotated", True)
 
                 if image_data:
-                    res = await asyncio.to_thread(
-                        vision_engine.process_frame,
-                        image_data,
-                        detect_persons,
-                        detect_small_objects,
-                        detect_gestures,
-                        return_annotated
-                    )
+                    if vision_engine:
+                        res = await asyncio.to_thread(
+                            vision_engine.process_frame,
+                            image_data,
+                            detect_persons,
+                            detect_small_objects,
+                            detect_gestures,
+                            return_annotated
+                        )
+                    else:
+                        res = {"error": "Vision engine is disabled"}
                     await websocket.send_text(json.dumps({
                         "event": "vision_result",
                         "data": res
@@ -376,7 +388,7 @@ async def rest_chat(request: ChatRequest):
     user_text = request.message.strip()
     if not user_text:
         return {"error": "Empty message"}
-    visual_ctx = vision_engine.get_visual_context_summary()
+    visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
     reply = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
     return {"reply": reply}
 
@@ -392,6 +404,8 @@ class VisionDetectRequest(BaseModel):
 
 @app.post("/api/vision/detect")
 async def api_detect_vision(req: VisionDetectRequest):
+    if not vision_engine:
+        return {"error": "Vision engine is disabled"}
     res = await asyncio.to_thread(
         vision_engine.process_frame,
         req.image,
@@ -406,6 +420,14 @@ async def api_detect_vision(req: VisionDetectRequest):
 
 @app.get("/api/vision/context")
 async def api_vision_context():
+    if not vision_engine:
+        return {
+            "summary": "Vision is disabled.",
+            "last_persons": [],
+            "last_objects": [],
+            "last_gestures": [],
+            "timestamp": 0
+        }
     return {
         "summary": vision_engine.get_visual_context_summary(),
         "last_persons": vision_engine.last_detected_persons,
@@ -491,6 +513,8 @@ async def api_detect_camera(req: CameraDetectRequest):
     clean_host, clean_port = sanitize_host_port(req.host, req.port)
     url = f"http://{clean_host}:{clean_port}/capture"
     try:
+        if not vision_engine:
+            return {"success": False, "error": "Vision engine is disabled"}
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(url)
             if resp.status_code == 200:

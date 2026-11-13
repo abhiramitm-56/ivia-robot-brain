@@ -1,0 +1,30 @@
+# ========================================================
+# IVIA AI Humanoid Brain - Raspberry Pi 4 Dockerfile
+# Optimized for ARM64 & 2GB RAM (Voice-First, ~100MB RAM Footprint)
+# ========================================================
+
+FROM python:3.11-slim
+
+# Install minimal audio runtime libraries (FFmpeg for fast resampling)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python requirements (Audio, LLM, TTS, WebSocket)
+COPY requirements_pi.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy server code and web dashboard
+COPY server/ /app/server/
+COPY web/ /app/web/
+
+ENV PORT=8000
+ENV ENABLE_VISION=false
+
+EXPOSE 8000
+
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]

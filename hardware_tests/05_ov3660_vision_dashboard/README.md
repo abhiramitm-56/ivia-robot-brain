@@ -19,8 +19,7 @@ Standalone object and gesture recognition test for the **ESP32-S3 N16R8** with a
 
 ---
 
-## Quick Start Instructions
-
+## Quick Start 
 ### 1. Flash the ESP32-S3 Firmware
 1. Open Arduino IDE.
 2. Open `05_ov3660_vision_dashboard.ino` (or use your already flashed `04_ov3660_camera_test.ino`—both work!).

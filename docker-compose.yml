@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  ivia-brain:
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    image: ivia-brain:latest
+    container_name: ivia_brain
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+      - ENABLE_VISION=false
