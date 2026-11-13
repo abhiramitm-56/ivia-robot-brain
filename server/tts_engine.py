@@ -48,18 +48,12 @@ class TTSEngine:
 
     def detect_voice(self, text: str) -> str:
         """
-        Dynamically detects language script and selects the appropriate native neural voice:
+        Detects language script and strictly selects the appropriate native neural voice:
         - Malayalam (മലയാളം): ml-IN-SobhanaNeural
-        - Hindi (हिंदी): hi-IN-SwaraNeural
-        - Tamil (தமிழ்): ta-IN-PallaviNeural
-        - English / Default: en-US-AriaNeural
+        - English: en-US-AriaNeural
         """
         if any('\u0D00' <= c <= '\u0D7F' for c in text):
             return TTS_VOICE_ML
-        elif any('\u0900' <= c <= '\u097F' for c in text):
-            return TTS_VOICE_HI
-        elif any('\u0B80' <= c <= '\u0BFF' for c in text):
-            return TTS_VOICE_TA
         return self.default_voice
 
     def _apply_phonetic_fixes(self, text: str) -> str:
@@ -91,15 +85,11 @@ class TTSEngine:
 
         spoken_text = self._apply_phonetic_fixes(text.strip())
         
-        # Enforce voice based on detected language
+        # Enforce voice strictly: Malayalam (ml-IN-SobhanaNeural) or English (en-US-AriaNeural)
         if target_lang == "ml" or any('\u0D00' <= c <= '\u0D7F' for c in spoken_text):
             voice_to_use = TTS_VOICE_ML
-        elif target_lang == "hi" or any('\u0900' <= c <= '\u097F' for c in spoken_text):
-            voice_to_use = TTS_VOICE_HI
-        elif target_lang == "en":
-            voice_to_use = self.default_voice
         else:
-            voice_to_use = self.detect_voice(spoken_text)
+            voice_to_use = self.default_voice
 
         cache_key = f"{voice_to_use}_{spoken_text}_{TTS_RATE}"
         if cache_key in self._cache:

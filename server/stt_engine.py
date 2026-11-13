@@ -135,7 +135,7 @@ class STTEngine:
                 raw_lang = (getattr(response, "language", "") or "").lower()
                 text = response.text.strip()
 
-                # Determine if speech is Malayalam/Indic
+                # Determine if speech is Malayalam (Native script or Manglish)
                 is_malayalam = (
                     raw_lang in ["malayalam", "tamil", "telugu", "kannada"]
                     or any('\u0D00' <= c <= '\u0D7F' for c in text)
@@ -145,7 +145,6 @@ class STTEngine:
                         "njan", "ningal", "cheyyunne"
                     ])
                 )
-                is_hindi = raw_lang == "hindi" or any('\u0900' <= c <= '\u097F' for c in text)
 
                 if is_malayalam:
                     detected_lang = "ml"
@@ -160,8 +159,6 @@ class STTEngine:
                             prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
                         )
                         text = r_ml.text.strip()
-                elif is_hindi:
-                    detected_lang = "hi"
                 else:
                     detected_lang = "en"
 

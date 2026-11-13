@@ -49,12 +49,11 @@ class LLMEngine:
 
     def _detect_lang(self, text: str) -> str:
         """
-        Detects whether the prompt is Malayalam (Native script or Manglish), Hindi, or English.
+        Detects whether the prompt is Malayalam (Native script or Manglish) or English.
+        Strictly returns 'ml' or 'en'.
         """
         if any('\u0D00' <= c <= '\u0D7F' for c in text):
             return "ml"
-        elif any('\u0900' <= c <= '\u097F' for c in text):
-            return "hi"
 
         # Check common Manglish indicators
         manglish_tokens = [
@@ -70,21 +69,20 @@ class LLMEngine:
 
     def _is_greeting_query(self, query: str) -> bool:
         """
-        Check if the user is saying hello or general greeting in English, Malayalam (Native & Manglish), or Hindi.
+        Check if the user is saying hello or general greeting in English or Malayalam.
         """
         q = query.lower().strip()
         patterns = [
             r"^hello\b", r"^hi\b", r"^hey\b", r"^greetings\b", r"^good\s+morning\b",
             r"^good\s+afternoon\b", r"^good\s+evening\b",
             r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ", r"സുഖമാണ്",
-            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\benthokkeyundu\b",
-            r"नमस्ते", r"नमस्कार", r"प्रणाम", r"हेलो"
+            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\benthokkeyundu\b"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
     def _is_identity_query(self, query: str) -> bool:
         """
-        Check if the user is asking about IVIA's identity, creators, or introduction.
+        Check if the user is asking about IVIA's identity, creators, or introduction in English or Malayalam.
         """
         q = query.lower().strip()
         patterns = [
@@ -95,8 +93,7 @@ class LLMEngine:
             r"\bperentha\b", r"\bperu\s+entha\b", r"\baaranu\s+nee\b", r"\baaraanu\s+nee\b",
             r"\bninne\s+aara\b", r"\baaranu\b", r"\baaraanu\b", r"\bmalayalam\s+ariyumo\b",
             r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
-            r"പേരം\s*ദാണ്", r"പേരം\s*താണ", r"പേര്", r"ആരാണ്",
-            r"तुम\s*कौन\s*हो", r"आप\s*कौन\s*हैं", r"तुम्हारा\s*नाम\s*क्या\s*है"
+            r"പേരം\s*ദാണ്", r"പേരം\s*താണ", r"പേര്", r"ആരാണ്"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -183,48 +180,46 @@ class LLMEngine:
         if not prompt:
             return ""
 
-        # Strictly prioritize the language detected by STT
-        lang = forced_lang if (forced_lang and forced_lang in ["en", "ml", "hi"]) else self._detect_lang(prompt)
+        # Strictly prioritize the language detected by STT ('en' or 'ml')
+        lang = "ml" if (forced_lang == "ml" or (not forced_lang and self._detect_lang(prompt) == "ml")) else "en"
         is_know_q = self._is_do_you_know_query(prompt)
 
         know_prefix = ""
         if is_know_q:
             if lang == "ml":
                 know_prefix = "അതെ, എനിക്കറിയാം. "
-            elif lang == "hi":
-                know_prefix = "हाँ, मुझे पता है। "
             else:
                 know_prefix = "Yes, I know. "
 
         # 1. Enforce Greeting query
         if self._is_greeting_query(prompt):
-            resp = GREETING_RESPONSE_ML if lang == "ml" else (GREETING_RESPONSE_HI if lang == "hi" else GREETING_RESPONSE)
+            resp = GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
             print(f"[LLM] Triggered Greeting Response ({lang}): '{resp}'")
             return resp
 
         # 2. Enforce strict identity response
         if self._is_identity_query(prompt):
-            resp = IDENTITY_RESPONSE_ML if lang == "ml" else (IDENTITY_RESPONSE_HI if lang == "hi" else IDENTITY_RESPONSE)
+            resp = IDENTITY_RESPONSE_ML if lang == "ml" else IDENTITY_RESPONSE
             print(f"[LLM] Triggered Identity Response ({lang}): '{resp}'")
             return resp
 
         # 3. Kerala CM query
         if self._is_kerala_cm_query(prompt):
-            base = KERALA_CM_RESPONSE_ML if lang == "ml" else (KERALA_CM_RESPONSE_HI if lang == "hi" else KERALA_CM_RESPONSE)
+            base = KERALA_CM_RESPONSE_ML if lang == "ml" else KERALA_CM_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered Kerala CM Response ({lang}): '{resp}'")
             return resp
 
         # 4. NextGenPro location query
         if self._is_nextgenpro_location_query(prompt):
-            base = NEXTGENPRO_LOCATION_RESPONSE_ML if lang == "ml" else (NEXTGENPRO_LOCATION_RESPONSE_HI if lang == "hi" else NEXTGENPRO_LOCATION_RESPONSE)
+            base = NEXTGENPRO_LOCATION_RESPONSE_ML if lang == "ml" else NEXTGENPRO_LOCATION_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered NextGenPro Location Response ({lang}): '{resp}'")
             return resp
 
         # 5. NextGenPro general query
         if self._is_nextgenpro_query(prompt):
-            base = NEXTGENPRO_RESPONSE_ML if lang == "ml" else (NEXTGENPRO_RESPONSE_HI if lang == "hi" else NEXTGENPRO_RESPONSE)
+            base = NEXTGENPRO_RESPONSE_ML if lang == "ml" else NEXTGENPRO_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered NextGenPro Response ({lang}): '{resp}'")
             return resp
@@ -240,13 +235,11 @@ class LLMEngine:
         if len(self.conversation_history) > 6:
             self.conversation_history = self.conversation_history[-6:]
 
-        # Enforce strict language mirroring instruction
+        # Enforce strict binary language mirroring instruction
         if lang == "ml":
-            lang_rule = "MANDATORY: The human spoke to you in MALAYALAM (മലയാളം). You MUST reply strictly in natural fluent MALAYALAM SCRIPT (മലയാളം). Never use English. Keep it 1 short sentence."
-        elif lang == "hi":
-            lang_rule = "MANDATORY: The human spoke to you in HINDI (हिंदी). You MUST reply strictly in HINDI SCRIPT (हिंदी). Never use English. Keep it 1 short sentence."
+            lang_rule = "MANDATORY TWO-LANGUAGE POLICY: The human spoke in MALAYALAM (മലയാളം). You MUST reply strictly in natural fluent MALAYALAM SCRIPT (മലയാളം). Never use English or any other language. Reply in strictly 1 short sentence."
         else:
-            lang_rule = "MANDATORY: The human spoke to you in ENGLISH. You MUST reply strictly in natural ENGLISH. Never use Malayalam or Hindi. Keep it 1 short sentence."
+            lang_rule = "MANDATORY TWO-LANGUAGE POLICY: The human spoke in ENGLISH. You MUST reply strictly in natural ENGLISH. Never use Malayalam or any other language. Reply in strictly 1 short sentence."
 
         system_content = f"{SYSTEM_PROMPT}\n\n{lang_rule}"
         if visual_context:
@@ -331,9 +324,6 @@ class LLMEngine:
             if lang == "ml":
                 if not clean.startswith("അതെ") and "എനിക്കറിയാം" not in clean[:30]:
                     clean = f"അതെ, എനിക്കറിയാം. {clean}"
-            elif lang == "hi":
-                if not clean.startswith("हाँ") and "मुझे पता है" not in clean[:30]:
-                    clean = f"हाँ, मुझे पता है। {clean}"
             else:
                 low = clean.lower()
                 if not low.startswith("yes, i know") and not low.startswith("yes i know"):
