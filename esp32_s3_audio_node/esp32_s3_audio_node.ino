@@ -135,7 +135,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
             isConnectedToServer = false;
-            Serial.println("[WS] Disconnected from Brain Server. Retrying in background... (Note: Render Cloud takes ~30s if waking up)");
+            Serial.println("[WS] Disconnected from Brain Server. Retrying in background...");
             break;
 
         case WStype_CONNECTED:
