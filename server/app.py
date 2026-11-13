@@ -227,19 +227,21 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
                             except Exception:
                                 pass
 
-                            # Run STT in threadpool
-                            user_text = await asyncio.to_thread(stt_engine.transcribe, wav_data)
+                            # Run STT in threadpool (strictly detects user language)
+                            user_text, detected_lang = await asyncio.to_thread(stt_engine.transcribe, wav_data)
                             if user_text:
-                                await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text})
+                                print(f"[Speech In] Detected Language: >> {detected_lang.upper()} << | Human: '{user_text}'")
+                                await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text, "lang": detected_lang})
                                 
-                                # Process query through LLM with real-time visual sensor context
+                                # Process query through LLM strictly matching user language
                                 visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
-                                answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
-                                await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
+                                answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx, detected_lang)
+                                print(f"[Speech Out ({detected_lang.upper()})] IVIA: '{answer_text}'")
+                                await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text, "lang": detected_lang})
 
-                                # Synthesize Speech
+                                # Synthesize Speech using the exact neural voice for that language
                                 await set_state("speaking")
-                                pcm_out = await tts_engine.synthesize_to_pcm(answer_text)
+                                pcm_out = await tts_engine.synthesize_to_pcm(answer_text, detected_lang)
                                 if pcm_out:
                                     if current_speech_task and not current_speech_task.done():
                                         current_speech_task.cancel()

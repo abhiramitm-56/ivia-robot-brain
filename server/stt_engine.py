@@ -76,53 +76,86 @@ class STTEngine:
 
         return t
 
-    def transcribe(self, wav_bytes: bytes) -> str:
+    def transcribe(self, wav_bytes: bytes) -> tuple[str, str]:
         """
-        Transcribe audio WAV bytes into text.
-        Falls back through Groq -> OpenAI -> Fallback.
+        Transcribes audio bytes into text and detects user language.
+        Returns: (transcript_text, detected_language)
+        Where detected_language is strictly 'en', 'ml', or 'hi'.
         """
         if not wav_bytes or len(wav_bytes) < 1000:
-            return ""
+            return "", "en"
 
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
+        whisper_context = "Hello, Namaskaram. IVIA humanoid robot."
+        detected_lang = "en"
+        text = ""
+
         # 1. Try Groq STT (Extremely fast, < 300ms)
-        # Perfectly balanced prompt that reliably triggers native Malayalam and English
-        whisper_context = "Conversational Malayalam and English. നമസ്കാരം, സുഖമാണോ? Hello IVIA, NextGenPro."
         if self.groq_client:
             try:
-                # First pass: Auto-detect language with balanced prompt
+                # First pass: transcribe with acoustic language detection (verbose_json)
                 response = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
                     temperature=0.0,
-                    prompt=whisper_context
+                    prompt=whisper_context,
+                    response_format="verbose_json"
                 )
+                raw_lang = (getattr(response, "language", "") or "").lower()
                 text = response.text.strip()
+
+                # Determine if speech is Malayalam/Indic
+                is_malayalam = (
+                    raw_lang in ["malayalam", "tamil", "telugu", "kannada"]
+                    or any('\u0D00' <= c <= '\u0D7F' for c in text)
+                    or any(w in text.lower() for w in [
+                        "namaskar", "sukham", "sugham", "perentha", "ninte", "evide",
+                        "aaranu", "aaraanu", "ariyumo", "parayumo", "enthokke", "malayalam",
+                        "njan", "ningal", "cheyyunne"
+                    ])
+                )
+                is_hindi = raw_lang == "hindi" or any('\u0900' <= c <= '\u097F' for c in text)
+
+                if is_malayalam:
+                    detected_lang = "ml"
+                    # If text doesn't contain native Malayalam characters yet, re-transcribe with forced language='ml'
+                    if not any('\u0D00' <= c <= '\u0D7F' for c in text):
+                        audio_file.seek(0)
+                        r_ml = self.groq_client.audio.transcriptions.create(
+                            model=GROQ_STT_MODEL,
+                            file=audio_file,
+                            language="ml",
+                            temperature=0.0
+                        )
+                        text = r_ml.text.strip()
+                elif is_hindi:
+                    detected_lang = "hi"
+                else:
+                    detected_lang = "en"
+
                 cleaned = self.clean_transcript(text)
                 if cleaned:
-                    print(f"[STT - Groq Auto] Transcribed: '{cleaned}'")
-                    return cleaned
+                    print(f"[STT] Detected Lang: >> {detected_lang.upper()} << | Transcript: '{cleaned}'")
+                    return cleaned, detected_lang
 
-                # Second pass (Malayalam Fallback): If auto-detect missed short Malayalam syllables, retry with language='ml'
+                # Second pass fallback if auto pass returned empty
                 audio_file.seek(0)
-                response_ml = self.groq_client.audio.transcriptions.create(
+                r_fallback = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
                     language="ml",
-                    temperature=0.0,
-                    prompt="മലയാളത്തിലാണ് സംസാരിക്കുന്നത്. നമസ്കാരം, സുഖമാണോ?"
+                    temperature=0.0
                 )
-                text_ml = response_ml.text.strip()
-                cleaned_ml = self.clean_transcript(text_ml)
-                if cleaned_ml:
-                    print(f"[STT - Groq Malayalam Forced] Transcribed: '{cleaned_ml}'")
-                    return cleaned_ml
-                else:
-                    return ""
+                cleaned_fb = self.clean_transcript(r_fallback.text.strip())
+                if cleaned_fb:
+                    print(f"[STT Fallback] Detected Lang: >> ML << | Transcript: '{cleaned_fb}'")
+                    return cleaned_fb, "ml"
+
+                return "", "en"
             except Exception as e:
-                print(f"[STT - Groq] Transcription failed: {e}")
+                print(f"[STT - Groq] Transcription error: {e}")
 
         # 2. Try OpenAI Whisper (Fallback)
         if self.openai_client:
@@ -136,13 +169,14 @@ class STTEngine:
                 text = response.text.strip()
                 cleaned = self.clean_transcript(text)
                 if cleaned:
-                    print(f"[STT - OpenAI] Transcribed: '{cleaned}'")
-                    return cleaned
+                    lang = "ml" if any('\u0D00' <= c <= '\u0D7F' for c in cleaned) else "en"
+                    print(f"[STT - OpenAI] Detected Lang: >> {lang.upper()} << | Transcript: '{cleaned}'")
+                    return cleaned, lang
                 else:
-                    return ""
+                    return "", "en"
             except Exception as e:
                 print(f"[STT - OpenAI] Transcription failed: {e}")
 
         # 3. Informative fallback if no API key is provided
         print("[STT] No active API key found for Groq or OpenAI.")
-        return ""
+        return "", "en"

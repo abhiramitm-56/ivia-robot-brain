@@ -81,16 +81,25 @@ class TTSEngine:
                 text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
         return text
 
-    async def synthesize_to_pcm(self, text: str) -> bytes:
+    async def synthesize_to_pcm(self, text: str, target_lang: str = None) -> bytes:
         """
         Synthesizes text into 16kHz 16-bit Mono PCM bytes using Microsoft Edge TTS.
-        Dynamically uses native Malayalam, Hindi, Tamil, or English neural voices.
+        Strictly enforces native Malayalam or English voice matching the target language.
         """
         if not text or not text.strip():
             return b""
 
         spoken_text = self._apply_phonetic_fixes(text.strip())
-        voice_to_use = self.detect_voice(spoken_text)
+        
+        # Enforce voice based on detected language
+        if target_lang == "ml" or any('\u0D00' <= c <= '\u0D7F' for c in spoken_text):
+            voice_to_use = TTS_VOICE_ML
+        elif target_lang == "hi" or any('\u0900' <= c <= '\u097F' for c in spoken_text):
+            voice_to_use = TTS_VOICE_HI
+        elif target_lang == "en":
+            voice_to_use = self.default_voice
+        else:
+            voice_to_use = self.detect_voice(spoken_text)
 
         cache_key = f"{voice_to_use}_{spoken_text}_{TTS_RATE}"
         if cache_key in self._cache:

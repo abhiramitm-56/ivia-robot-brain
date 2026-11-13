@@ -173,15 +173,18 @@ class LLMEngine:
         has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q or "മുഖ്യമന്ത്രി" in q or "मुख्यमंत्री" in q
         return (has_kerala and has_cm) or "മുഖ്യമന്ത്രി" in q
 
-    def generate_response(self, user_prompt: str, visual_context: str = None) -> str:
+    def generate_response(self, user_prompt: str, visual_context: str = None, forced_lang: str = None) -> str:
         """
-        Generate answer for user prompt with multilingual intelligence.
+        Generate answer for user prompt with strict multilingual mirroring:
+        - Human speaks English -> IVIA answers strictly in English
+        - Human speaks Malayalam -> IVIA answers strictly in Malayalam script
         """
         prompt = user_prompt.strip()
         if not prompt:
             return ""
 
-        lang = self._detect_lang(prompt)
+        # Strictly prioritize the language detected by STT
+        lang = forced_lang if (forced_lang and forced_lang in ["en", "ml", "hi"]) else self._detect_lang(prompt)
         is_know_q = self._is_do_you_know_query(prompt)
 
         know_prefix = ""
@@ -230,21 +233,27 @@ class LLMEngine:
         clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
         if clean_p in ["edupark", "edupark private limited", "ivia"]:
             print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
-            return GREETING_RESPONSE
+            return GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
 
-        # 4. Add user prompt to conversation history
+        # Add user prompt to conversation history
         self.conversation_history.append({"role": "user", "content": prompt})
-        if len(self.conversation_history) > 8:
-            self.conversation_history = self.conversation_history[-8:]
+        if len(self.conversation_history) > 6:
+            self.conversation_history = self.conversation_history[-6:]
 
-        # Augment system prompt with live vision context
-        system_content = SYSTEM_PROMPT
+        # Enforce strict language mirroring instruction
+        if lang == "ml":
+            lang_rule = "MANDATORY: The human spoke to you in MALAYALAM (മലയാളം). You MUST reply strictly in natural fluent MALAYALAM SCRIPT (മലയാളം). Never use English. Keep it 1 short sentence."
+        elif lang == "hi":
+            lang_rule = "MANDATORY: The human spoke to you in HINDI (हिंदी). You MUST reply strictly in HINDI SCRIPT (हिंदी). Never use English. Keep it 1 short sentence."
+        else:
+            lang_rule = "MANDATORY: The human spoke to you in ENGLISH. You MUST reply strictly in natural ENGLISH. Never use Malayalam or Hindi. Keep it 1 short sentence."
+
+        system_content = f"{SYSTEM_PROMPT}\n\n{lang_rule}"
         if visual_context:
-            system_content += f"\n\n[LIVE ROBOT VISION TELEMETRY]:\n{visual_context}\nCRITICAL: You have a live camera sensor attached. When the user asks what you see, who is in front of you, what they are holding, or about their hand gesture, answer directly based on this live telemetry!"
+            system_content += f"\n\n[LIVE ROBOT VISION TELEMETRY]:\n{visual_context}"
 
         history_messages = list(self.conversation_history)
         if self._is_vision_query(prompt) and visual_context:
-            # Explicitly tie visual observation to the question
             history_messages[-1] = {
                 "role": "user",
                 "content": f"{prompt}\n[Robot Vision Sensor reports: {visual_context}]"
