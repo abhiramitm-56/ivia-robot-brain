@@ -126,7 +126,7 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
 
     # Audio stream buffer & VAD variables
     audio_buffer = bytearray()
-    preroll_buffer = deque(maxlen=35)  # Preserves ~560ms of speech onset so first syllable is never cut
+    preroll_buffer = deque(maxlen=20)  # Preserves ~640ms of speech onset so the first syllable is never cut
     is_user_speaking = False
     silence_start_time = None
     speech_start_time = None

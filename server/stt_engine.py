@@ -29,6 +29,31 @@ class STTEngine:
             except Exception as e:
                 print(f"[STT] OpenAI initialization error: {e}")
 
+    def normalize_robot_names(self, text: str) -> str:
+        """
+        Phonetic normalization to fix common Whisper misinterpretations of the robot name and organization:
+        - 'Ivy', 'Via', 'Iviah', 'Eva', 'Ivey' -> 'IVIA'
+        - 'ഐവി', 'ഇവിയ', 'ഇവ്യ' -> 'ഐവിയ'
+        - 'Next Gen Pro', 'Neck gen pro' -> 'NextGenPro'
+        - 'Edu Park', 'Edupark' -> 'EduPark'
+        """
+        if not text:
+            return ""
+
+        t = text
+        # English variations of IVIA
+        t = re.sub(r"\b(?:ivy|i\s*via|ivia[h]?|ivey|eyvia|ayvia|eva)\b", "IVIA", t, flags=re.IGNORECASE)
+        # Malayalam script variations of IVIA
+        t = re.sub(r"\b(?:ഐവി|ഇവിയ|ഇവ്യ|ഐവിയാ)\b", "ഐവിയ", t)
+
+        # NextGenPro variations
+        t = re.sub(r"\b(?:next\s*gen\s*pro|nextgen\s*pro|neck\s*gen\s*pro|next\s*gen)\b", "NextGenPro", t, flags=re.IGNORECASE)
+        t = re.sub(r"\b(?:നെക്സ്റ്റ്\s*ജെൻ\s*പ്രോ|നെക്സ്റ്റ്\s*ജെൻപ്രോ)\b", "നെക്സ്റ്റ്ജെൻപ്രോ", t)
+
+        # EduPark variations
+        t = re.sub(r"\b(?:edu\s*park|eduparc)\b", "EduPark", t, flags=re.IGNORECASE)
+        return t
+
     def clean_transcript(self, text: str) -> str:
         """
         Cleans Whisper STT output:
@@ -52,6 +77,9 @@ class STTEngine:
             r"^amara\.org.*$",
             r"^bye[\.\!\?]*$",
             r"^you[\.\!\?]*$",
+            r"^so[\.\!\?]*$",
+            r"^yeah[\.\!\?]*$",
+            r"^oh[\.\!\?]*$",
             r"^edupark[\.\!\?]*$",
             r"^edupark\s+private\s+limited[\.\!\?]*$",
             r"^nextgenpro[\.\!\?]*$",
@@ -88,7 +116,8 @@ class STTEngine:
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
-        whisper_context = "Hello, Namaskaram. IVIA humanoid robot."
+        # Prime Whisper's vocabulary and spelling for robot persona, brand names, and Malayalam phonetics
+        whisper_context = "IVIA, humanoid companion robot by NextGenPro Innovations, EduPark, Ernakulam, Kerala. നമസ്കാരം, സുഖമാണോ, പേരെന്താണ്, ആരാണ്."
         detected_lang = "en"
         text = ""
 
@@ -127,7 +156,8 @@ class STTEngine:
                             model=GROQ_STT_MODEL,
                             file=audio_file,
                             language="ml",
-                            temperature=0.0
+                            temperature=0.0,
+                            prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
                         )
                         text = r_ml.text.strip()
                 elif is_hindi:
@@ -135,7 +165,7 @@ class STTEngine:
                 else:
                     detected_lang = "en"
 
-                cleaned = self.clean_transcript(text)
+                cleaned = self.normalize_robot_names(self.clean_transcript(text))
                 if cleaned:
                     print(f"[STT] Detected Lang: >> {detected_lang.upper()} << | Transcript: '{cleaned}'")
                     return cleaned, detected_lang
@@ -146,9 +176,10 @@ class STTEngine:
                     model=GROQ_STT_MODEL,
                     file=audio_file,
                     language="ml",
-                    temperature=0.0
+                    temperature=0.0,
+                    prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
                 )
-                cleaned_fb = self.clean_transcript(r_fallback.text.strip())
+                cleaned_fb = self.normalize_robot_names(self.clean_transcript(r_fallback.text.strip()))
                 if cleaned_fb:
                     print(f"[STT Fallback] Detected Lang: >> ML << | Transcript: '{cleaned_fb}'")
                     return cleaned_fb, "ml"
@@ -167,7 +198,7 @@ class STTEngine:
                     prompt=whisper_context
                 )
                 text = response.text.strip()
-                cleaned = self.clean_transcript(text)
+                cleaned = self.normalize_robot_names(self.clean_transcript(text))
                 if cleaned:
                     lang = "ml" if any('\u0D00' <= c <= '\u0D7F' for c in cleaned) else "en"
                     print(f"[STT - OpenAI] Detected Lang: >> {lang.upper()} << | Transcript: '{cleaned}'")

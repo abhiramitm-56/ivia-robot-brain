@@ -106,5 +106,5 @@ BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
 # Voice Activity Detection (VAD) - Ultra-Low Latency Conversational Turn-Taking
 SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.55)) # 0.55s silence gives snappy response without chopping words
+SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.65)) # 0.65s silence prevents mid-sentence cutoffs while keeping response snappy
 MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
