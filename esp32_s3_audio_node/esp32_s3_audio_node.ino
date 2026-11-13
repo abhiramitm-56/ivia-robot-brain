@@ -292,7 +292,7 @@ void setup() {
 #endif
     webSocket.onEvent(webSocketEvent);
     webSocket.setReconnectInterval(3000); // Built-in smooth reconnection retry
-    // Keep-alive heartbeat: ping every 15s to keep Render Cloud proxy and Hotspot NAT alive
+    // Keep-alive heartbeat: ping every 15s to keep local Wi-Fi and Hotspot NAT socket active
     webSocket.enableHeartbeat(15000, 4000, 2);
 
     // Launch microphone task on Core 0

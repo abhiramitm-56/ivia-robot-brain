@@ -12,20 +12,12 @@
 #define WIFI_PASSWORD_2 ""                // Secondary: Home/Office Password (optional)
 
 // ==========================================
-// 2. Server Connection Configuration
+// 2. Server Connection Configuration (Raspberry Pi 4 Brain)
 // ==========================================
-// --- OPTION A: On-Board Raspberry Pi 4 (Recommended - Zero Cold Start, 1ms Latency) ---
-// Find your Pi's local IP (e.g. run 'hostname -I' on Pi)
-#define SERVER_HOST   "192.168.29.221"   // <-- Set to your Raspberry Pi IP or "raspberrypi.local"
+#define SERVER_HOST   "192.168.29.221"   // Raspberry Pi Local IP (e.g. from 'hostname -I')
 #define SERVER_PORT   8000              // Default Docker FastAPI port
 #define WS_PATH       "/ws/esp32"
 #define USE_SSL       false             // Direct high-speed local WebSocket (ws://)
-
-// --- OPTION B: Cloud Server (e.g., Render.com) ---
-// #define SERVER_HOST   "ivia-robot-brain.onrender.com"   
-// #define SERVER_PORT   443              // Standard secure SSL port
-// #define WS_PATH       "/ws/esp32"
-// #define USE_SSL       true             // true for Render Cloud (WSS)
 
 // ==========================================
 // 3. Audio Configuration (16kHz 16-bit Mono)

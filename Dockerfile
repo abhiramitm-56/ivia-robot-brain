@@ -1,5 +1,5 @@
 # ========================================================
-# IVIA AI Humanoid Brain - Cloud Server Dockerfile (Render.com)
+# IVIA AI Humanoid Brain - Backend Server Dockerfile
 # ========================================================
 
 FROM python:3.11-slim
