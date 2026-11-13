@@ -49,23 +49,35 @@ class LLMEngine:
 
     def _detect_lang(self, text: str) -> str:
         """
-        Detects whether the prompt is Malayalam, Hindi, or English.
+        Detects whether the prompt is Malayalam (Native script or Manglish), Hindi, or English.
         """
         if any('\u0D00' <= c <= '\u0D7F' for c in text):
             return "ml"
         elif any('\u0900' <= c <= '\u097F' for c in text):
             return "hi"
+
+        # Check common Manglish indicators
+        manglish_tokens = [
+            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\bperentha\b",
+            r"\bperu\s+entha\b", r"\baaranu\b", r"\baaraanu\b", r"\bariyumo\b",
+            r"\bparayumo\b", r"\bevide\w*\b", r"\benthokke\w*\b", r"\bmalayalam\b",
+            r"\bnjan\b", r"\bninte\b", r"\bningal\w*\b", r"\bcheyyunne\b"
+        ]
+        if any(re.search(pat, text, re.IGNORECASE) for pat in manglish_tokens):
+            return "ml"
+
         return "en"
 
     def _is_greeting_query(self, query: str) -> bool:
         """
-        Check if the user is saying hello or general greeting in English, Malayalam, or Hindi.
+        Check if the user is saying hello or general greeting in English, Malayalam (Native & Manglish), or Hindi.
         """
         q = query.lower().strip()
         patterns = [
             r"^hello\b", r"^hi\b", r"^hey\b", r"^greetings\b", r"^good\s+morning\b",
             r"^good\s+afternoon\b", r"^good\s+evening\b",
-            r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ",
+            r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ", r"സുഖമാണ്",
+            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\benthokkeyundu\b",
             r"नमस्ते", r"नमस्कार", r"प्रणाम", r"हेलो"
         ]
         return any(re.search(pat, q) for pat in patterns)
@@ -80,7 +92,10 @@ class LLMEngine:
             r"\bwhat is your name\b", r"\bwho created you\b", r"\bwho made you\b",
             r"\bwho developed you\b", r"\btell me about yourself\b", r"\bwhat are you\b",
             r"\byour name\b",
+            r"\bperentha\b", r"\bperu\s+entha\b", r"\baaranu\s+nee\b", r"\baaraanu\s+nee\b",
+            r"\bninne\s+aara\b", r"\baaranu\b", r"\baaraanu\b", r"\bmalayalam\s+ariyumo\b",
             r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
+            r"പേരം\s*ദാണ്", r"പേരം\s*താണ", r"പേര്", r"ആരാണ്",
             r"तुम\s*कौन\s*हो", r"आप\s*कौन\s*हैं", r"तुम्हारा\s*नाम\s*क्या\s*है"
         ]
         return any(re.search(pat, q) for pat in patterns)
@@ -129,8 +144,8 @@ class LLMEngine:
         Check if the user is asking about NextGenPro's location, address, or where it is.
         """
         q = query.lower().strip()
-        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q or "നെക്സ്റ്റ്ജെൻപ്രോ" in q or "നെക്സ്റ്റ്" in q or "नेक्स्टजेनप्रो" in q
-        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located", "എവിടെയാണ്", "എവിടെ", "സ്ഥലം", "ഓഫീസ്", "कहाँ", "पता", "कार्यालय"]
+        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q or "നെക്സ്റ്റ്ജെൻപ്രോ" in q or "നെക്സ്റ്റ്" in q or "നെക്ത്" in q or "പ്രോ" in q or "नेक्स्टजेनप्रो" in q
+        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located", "evide", "evideya", "evideyanu", "sthalam", "sthithi", "എവിടെയാണ്", "എവിടെ", "സ്ഥിതി", "സ്ഥലം", "ഓഫീസ്", "कहाँ", "पता", "कार्यालय"]
         return has_ngp and any(w in q for w in loc_words)
 
     def _is_nextgenpro_query(self, query: str) -> bool:

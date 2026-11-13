@@ -88,11 +88,11 @@ class STTEngine:
         audio_file.name = "audio.wav"
 
         # 1. Try Groq STT (Extremely fast, < 300ms)
-        # Context prompt includes Malayalam and English to condition Whisper's tokenizer
-        whisper_context = "മലയാളം സംഭാഷണം, നമസ്കാരം, സുഖമാണോ. IVIA companion by NextGenPro and EduPark. Conversational speech in Malayalam, English, and Hindi."
+        # Perfectly balanced prompt that reliably triggers native Malayalam and English
+        whisper_context = "Conversational Malayalam and English. നമസ്കാരം, സുഖമാണോ? Hello IVIA, NextGenPro."
         if self.groq_client:
             try:
-                # First pass: Auto-detect language with multilingual prompt
+                # First pass: Auto-detect language with balanced prompt
                 response = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
@@ -112,7 +112,7 @@ class STTEngine:
                     file=audio_file,
                     language="ml",
                     temperature=0.0,
-                    prompt="മലയാളം സംഭാഷണം, നമസ്കാരം"
+                    prompt="മലയാളത്തിലാണ് സംസാരിക്കുന്നത്. നമസ്കാരം, സുഖമാണോ?"
                 )
                 text_ml = response_ml.text.strip()
                 cleaned_ml = self.clean_transcript(text_ml)

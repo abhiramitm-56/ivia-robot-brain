@@ -15,3 +15,4 @@ services:
     environment:
       - PORT=8000
       - ENABLE_VISION=false
+

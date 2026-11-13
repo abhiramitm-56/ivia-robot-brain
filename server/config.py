@@ -116,7 +116,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # STT Models
-GROQ_STT_MODEL = "whisper-large-v3-turbo"
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 OPENAI_STT_MODEL = "whisper-1"
 
 # ==========================================
@@ -143,7 +143,7 @@ SAMPLE_RATE = 16000          # 16kHz
 CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
-# Voice Activity Detection (VAD) - Tuned for Snappy Conversational Turn-Taking
-SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger (450 ensures soft Malayalam/Hindi speech is detected)
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.45)) # 0.45s silence triggers instantaneous reply!
-MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
+# Voice Activity Detection (VAD) - Tuned for Natural Multilingual Speech Cadence
+SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger
+SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.80)) # 0.80s silence prevents cutting off Malayalam words/phrases mid-sentence
+MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.40))

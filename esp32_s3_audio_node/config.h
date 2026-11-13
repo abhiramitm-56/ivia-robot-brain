@@ -16,7 +16,7 @@
 // ==========================================
 // --- OPTION A: On-Board Raspberry Pi 4 (Recommended - Zero Cold Start, 1ms Latency) ---
 // Find your Pi's local IP (e.g. run 'hostname -I' on Pi)
-#define SERVER_HOST   "192.168.29.50"   // <-- Set to your Raspberry Pi IP or "raspberrypi.local"
+#define SERVER_HOST   "192.168.29.221"   // <-- Set to your Raspberry Pi IP or "raspberrypi.local"
 #define SERVER_PORT   8000              // Default Docker FastAPI port
 #define WS_PATH       "/ws/esp32"
 #define USE_SSL       false             // Direct high-speed local WebSocket (ws://)

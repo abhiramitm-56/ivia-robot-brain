@@ -41,10 +41,16 @@ class TTSEngine:
         """
         # Only apply Latin phonetic fixes if text contains Latin characters
         if re.search(r"[a-zA-Z]", text):
-            text = re.sub(r"\bIVIA\b", IVIA_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bEduPark\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bEdu\s*Park\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
+            # If text is primarily Malayalam, use native Malayalam phonetics for brand names
+            if any('\u0D00' <= c <= '\u0D7F' for c in text):
+                text = re.sub(r"\bIVIA\b", "ഐവിയ", text, flags=re.IGNORECASE)
+                text = re.sub(r"\bNextGenPro\b", "നെക്സ്റ്റ്ജെൻപ്രോ", text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEduPark\b", "എഡ്യൂപാർക്ക്", text, flags=re.IGNORECASE)
+            else:
+                text = re.sub(r"\bIVIA\b", IVIA_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEduPark\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEdu\s*Park\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
         return text
 
     async def synthesize_to_pcm(self, text: str) -> bytes:
