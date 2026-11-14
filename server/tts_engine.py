@@ -3,6 +3,9 @@ import edge_tts
 from server.audio_utils import decode_audio_to_pcm16
 from server.config import (
     TTS_VOICE,
+    TTS_VOICE_ML,
+    TTS_VOICE_HI,
+    TTS_VOICE_TA,
     TTS_RATE,
     TTS_VOLUME,
     SAMPLE_RATE,
@@ -22,31 +25,41 @@ class TTSEngine:
         Ensures greetings, identity, and location questions play back in 0ms!
         """
         from server.config import (
-            IDENTITY_RESPONSE,
-            GREETING_RESPONSE,
-            NEXTGENPRO_LOCATION_RESPONSE,
-            NEXTGENPRO_RESPONSE,
-            KERALA_CM_RESPONSE
+            IDENTITY_RESPONSE, IDENTITY_RESPONSE_ML,
+            GREETING_RESPONSE, GREETING_RESPONSE_ML,
+            NEXTGENPRO_LOCATION_RESPONSE, NEXTGENPRO_LOCATION_RESPONSE_ML
         )
         prewarm_texts = [
             GREETING_RESPONSE,
+            GREETING_RESPONSE_ML,
             IDENTITY_RESPONSE,
+            IDENTITY_RESPONSE_ML,
             NEXTGENPRO_LOCATION_RESPONSE,
-            NEXTGENPRO_RESPONSE,
-            KERALA_CM_RESPONSE,
-            "Yes, I know."
+            NEXTGENPRO_LOCATION_RESPONSE_ML,
+            "Yes, I know.",
+            "അതെ, എനിക്കറിയാം."
         ]
         for t in prewarm_texts:
             try:
                 await self.synthesize_to_pcm(t)
             except Exception:
                 pass
-        print(f"[TTS Engine] Pre-warmed {len(self._cache)} core English responses into memory for 0ms instant playback!")
+        print(f"[TTS Engine] Pre-warmed {len(self._cache)} core responses into memory for 0ms instant playback!")
 
-    def detect_voice(self, text: str = "") -> str:
+    def detect_voice(self, text: str) -> str:
         """
-        Returns the English neural voice.
+        Dynamically detects language script and selects the appropriate native neural voice:
+        - Malayalam (മലയാളം): ml-IN-SobhanaNeural
+        - Hindi (हिंदी): hi-IN-SwaraNeural
+        - Tamil (தமிழ்): ta-IN-PallaviNeural
+        - English / Default: en-US-AriaNeural
         """
+        if any('\u0D00' <= c <= '\u0D7F' for c in text):
+            return TTS_VOICE_ML
+        elif any('\u0900' <= c <= '\u097F' for c in text):
+            return TTS_VOICE_HI
+        elif any('\u0B80' <= c <= '\u0BFF' for c in text):
+            return TTS_VOICE_TA
         return self.default_voice
 
     def _apply_phonetic_fixes(self, text: str) -> str:
@@ -54,22 +67,39 @@ class TTSEngine:
         Replace names with phonetic spellings so TTS speaks them naturally
         instead of spelling out acronyms or mispronouncing portmanteaus.
         """
+        # Only apply Latin phonetic fixes if text contains Latin characters
         if re.search(r"[a-zA-Z]", text):
-            text = re.sub(r"\bIVIA\b", IVIA_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bEduPark\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bEdu\s*Park\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
-            text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
+            # If text is primarily Malayalam, use native Malayalam phonetics for brand names
+            if any('\u0D00' <= c <= '\u0D7F' for c in text):
+                text = re.sub(r"\bIVIA\b", "ഐവിയ", text, flags=re.IGNORECASE)
+                text = re.sub(r"\bNextGenPro\b", "നെക്സ്റ്റ്ജെൻപ്രോ", text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEduPark\b", "എഡ്യൂപാർക്ക്", text, flags=re.IGNORECASE)
+            else:
+                text = re.sub(r"\bIVIA\b", IVIA_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEduPark\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bEdu\s*Park\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
+                text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
         return text
 
-    async def synthesize_to_pcm(self, text: str, target_lang: str = "en") -> bytes:
+    async def synthesize_to_pcm(self, text: str, target_lang: str = None) -> bytes:
         """
-        Synthesizes English text into 16kHz 16-bit Mono PCM bytes using Microsoft Edge TTS.
+        Synthesizes text into 16kHz 16-bit Mono PCM bytes using Microsoft Edge TTS.
+        Strictly enforces native Malayalam or English voice matching the target language.
         """
         if not text or not text.strip():
             return b""
 
         spoken_text = self._apply_phonetic_fixes(text.strip())
-        voice_to_use = self.default_voice
+        
+        # Enforce voice based on detected language
+        if target_lang == "ml" or any('\u0D00' <= c <= '\u0D7F' for c in spoken_text):
+            voice_to_use = TTS_VOICE_ML
+        elif target_lang == "hi" or any('\u0900' <= c <= '\u097F' for c in spoken_text):
+            voice_to_use = TTS_VOICE_HI
+        elif target_lang == "en":
+            voice_to_use = self.default_voice
+        else:
+            voice_to_use = self.detect_voice(spoken_text)
 
         cache_key = f"{voice_to_use}_{spoken_text}_{TTS_RATE}"
         if cache_key in self._cache:

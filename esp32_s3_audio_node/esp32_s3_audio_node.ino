@@ -177,14 +177,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 // ========================================================
 // 5. Continuous Mic Streaming Task (Core 0)
 // Batched to 512 samples (32ms) to eliminate TLS buffer saturation
-// Includes DC offset removal filter and 16-bit clamp
 // ========================================================
 void micStreamingTask(void *param) {
     int32_t raw_buffer[512];
     int16_t pcm16_buffer[512];
     size_t bytes_read = 0;
     unsigned long lastLog = 0;
-    float dc_offset = 0.0f; // Single-pole IIR filter state for INMP441 DC bias removal
 
     while (true) {
         // Echo prevention: only record when connected and IVIA is NOT speaking
@@ -194,19 +192,13 @@ void micStreamingTask(void *param) {
                 size_t samples = bytes_read / sizeof(int32_t);
                 int16_t peak = 0;
 
-                // INMP441 returns 24-bit in 32-bit slot -> shift 14 for optimal voice volume (+12dB)
+                // INMP441 returns 24-bit in 32-bit slot -> shift 14 for optimal voice volume (+6dB)
                 for (size_t i = 0; i < samples; i++) {
                     int32_t val = raw_buffer[i] >> 14;
-
-                    // DC offset removal: eliminates mic hardware DC bias and drops ambient floor to near 0
-                    dc_offset = (0.995f * dc_offset) + (0.005f * (float)val);
-                    int32_t clean_val = val - (int32_t)dc_offset;
-
-                    if (clean_val > 32767) clean_val = 32767;
-                    else if (clean_val < -32768) clean_val = -32768;
-
-                    pcm16_buffer[i] = (int16_t)clean_val;
-                    int16_t abs_s = abs((int16_t)clean_val);
+                    if (val > 32767) val = 32767;
+                    else if (val < -32768) val = -32768;
+                    pcm16_buffer[i] = (int16_t)val;
+                    int16_t abs_s = abs((int16_t)val);
                     if (abs_s > peak) peak = abs_s;
                 }
 
