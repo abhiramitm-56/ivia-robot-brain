@@ -4,20 +4,10 @@ from openai import OpenAI
 from server.config import (
     SYSTEM_PROMPT,
     IDENTITY_RESPONSE,
-    IDENTITY_RESPONSE_ML,
-    IDENTITY_RESPONSE_HI,
     GREETING_RESPONSE,
-    GREETING_RESPONSE_ML,
-    GREETING_RESPONSE_HI,
     NEXTGENPRO_RESPONSE,
-    NEXTGENPRO_RESPONSE_ML,
-    NEXTGENPRO_RESPONSE_HI,
     NEXTGENPRO_LOCATION_RESPONSE,
-    NEXTGENPRO_LOCATION_RESPONSE_ML,
-    NEXTGENPRO_LOCATION_RESPONSE_HI,
     KERALA_CM_RESPONSE,
-    KERALA_CM_RESPONSE_ML,
-    KERALA_CM_RESPONSE_HI,
     GROQ_API_KEY,
     OPENAI_API_KEY,
     GEMINI_API_KEY,
@@ -47,26 +37,6 @@ class LLMEngine:
             except Exception as e:
                 print(f"[LLM] OpenAI init error: {e}")
 
-    def _detect_lang(self, text: str) -> str:
-        """
-        Detects whether the prompt is Malayalam (Native script or Manglish) or English.
-        Strictly returns 'ml' or 'en'.
-        """
-        if any('\u0D00' <= c <= '\u0D7F' for c in text):
-            return "ml"
-
-        # Check common Manglish indicators
-        manglish_tokens = [
-            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\bperentha\b",
-            r"\bperu\s+entha\b", r"\baaranu\b", r"\baaraanu\b", r"\bariyumo\b",
-            r"\bparayumo\b", r"\bevide\w*\b", r"\benthokke\w*\b", r"\bmalayalam\b",
-            r"\bnjan\b", r"\bninte\b", r"\bningal\w*\b", r"\bcheyyunne\b"
-        ]
-        if any(re.search(pat, text, re.IGNORECASE) for pat in manglish_tokens):
-            return "ml"
-
-        return "en"
-
     def _is_greeting_query(self, query: str) -> bool:
         """
         Check if the user is saying a standalone hello or general greeting.
@@ -77,21 +47,17 @@ class LLMEngine:
             r"^(?:hello|hi|hey|greetings)(?:\s+ivia)?$",
             r"^(?:good\s+morning|good\s+afternoon|good\s+evening)(?:\s+ivia)?$",
             r"^(?:how\s+are\s+you|how\s+do\s+you\s+do)(?:\s+ivia)?$",
-            r"^(?:നമസ്കാരം|ഹലോ|ഹായ്|സുഖമാണോ|സുഖമാണ്)(?:\s+ഐവിയ)?$",
-            r"^(?:namaskar\w*|sukham\w*|sugham\w*|enthokkeyundu)(?:\s+ivia)?$",
-            r"^(?:ivia|ഐവിയ)$"
+            r"^(?:ivia)$"
         ]
         return any(re.match(pat, q_clean, flags=re.IGNORECASE) for pat in patterns)
 
     def _is_identity_query(self, query: str) -> bool:
         """
         Check if the user is specifically asking about IVIA's identity, creators, or introduction.
-        Requires explicit self-referential targets (you/your/self) so general 'who is X' questions
-        (e.g., 'who is the PM', 'who is Gandhiji') are NOT misidentified as robot identity queries.
+        Requires explicit self-referential targets (you/your/self).
         """
         q = query.lower().strip()
         patterns = [
-            # English queries specifically asking about the robot
             r"\bwho\s+are\s+you\b",
             r"\bwhat\s+is\s+your\s+name\b",
             r"\bintroduce\s+yourself\b",
@@ -100,22 +66,7 @@ class LLMEngine:
             r"\bwho\s+made\s+you\b",
             r"\bwho\s+developed\s+you\b",
             r"\bwhat\s+are\s+you\b",
-            r"\byour\s+name\b",
-
-            # Malayalam queries specifically asking about YOU/YOUR name
-            r"(?:നീ|നിങ്ങൾ)\s*ആരാണ്",
-            r"ആരാണ്\s*(?:നീ|നിങ്ങൾ)",
-            r"(?:നിന്റെ|നിങ്ങളുടെ)\s*പേരെന്താണ്",
-            r"(?:നിന്റെ|നിങ്ങളുടെ)\s*പേര്\s*എന്താണ്",
-            r"പേരെന്താണ്\s*(?:നിന്റെ|നിങ്ങൾക്ക്|നിനക്ക്)?",
-            r"സ്വയം\s*പരിചയപ്പെടുത്തുക",
-
-            # Manglish queries specifically targeting the robot
-            r"\baaranu\s+(?:nee|ningal)\b",
-            r"\b(?:nee|ningal)\s+aaranu\b",
-            r"\bninte\s+perentha\b",
-            r"\bninte\s+peru\s+entha\b",
-            r"\bninne\s+aara(?:anu)?\s+(?:undakkiyathu|undakkiye|undakkiyath)\b"
+            r"\byour\s+name\b"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -123,18 +74,17 @@ class LLMEngine:
         """
         If user starts with an address like 'Hello IVIA, ...' or 'Hi, ...' or 'IVIA, ...'
         and follows with an actual question/query, strip the address so the real question
-        can be properly answered by the LLM instead of triggering a greeting.
+        can be properly answered by the LLM.
         """
         t = text.strip()
         m = re.match(
-            r"^(?:(?:hello|hi|hey|greetings|namaskaram|namaskar|നമസ്കാരം|ഹലോ|ഹായ്)(?:\s+(?:ivia|ഐവിയ|robot))?|(?:ivia|ഐവിയ|robot))[\s,:\-]+(.+)$",
+            r"^(?:(?:hello|hi|hey|greetings)(?:\s+(?:ivia|robot))?|(?:ivia|robot))[\s,:\-]+(.+)$",
             t,
             flags=re.IGNORECASE
         )
         if m:
             rem = m.group(1).strip()
-            # If the remainder has meaningful content (at least 3 characters and not just robot name), use remainder
-            if len(rem) >= 3 and not re.match(r"^(?:ivia|ഐവിയ|robot)$", rem, re.IGNORECASE):
+            if len(rem) >= 3 and not re.match(r"^(?:ivia|robot)$", rem, re.IGNORECASE):
                 return rem
         return t
 
@@ -166,24 +116,22 @@ class LLMEngine:
 
     def _is_do_you_know_query(self, query: str) -> bool:
         """
-        Check if user asked a question starting with or containing 'do you know' / 'അറിയാമോ' / 'क्या आप जानते हैं'.
+        Check if user asked a question starting with or containing 'do you know'.
         """
         q = query.lower().strip()
         patterns = [
             r"^do\s+you\s+know\b", r"^do\s+u\s+know\b", r"\bdo\s+you\s+know\b", r"\bdo\s+u\s+know\b",
-            r"^can\s+you\s+tell\s+me\s+if\s+you\s+know\b",
-            r"അറിയാമോ", r"നിനക്കറിയാമോ", r"നിങ്ങൾക്ക്\s*അറിയാമോ",
-            r"क्या\s*आप\s*जानते\s*हैं", r"क्या\s*तुम\s*जानते\s*हो", r"जानते\s*हो"
+            r"^can\s+you\s+tell\s+me\s+if\s+you\s+know\b"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
     def _is_nextgenpro_location_query(self, query: str) -> bool:
         """
-        Check if the user is asking about NextGenPro's location, address, or where it is.
+        Check if the user is asking about NextGenPro's location or address.
         """
         q = query.lower().strip()
-        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q or "നെക്സ്റ്റ്ജെൻപ്രോ" in q or "നെക്സ്റ്റ്" in q or "നെക്ത്" in q or "പ്രോ" in q or "नेक्स्टजेनप्रो" in q
-        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located", "evide", "evideya", "evideyanu", "sthalam", "sthithi", "എവിടെയാണ്", "എവിടെ", "സ്ഥിതി", "സ്ഥലം", "ഓഫീസ്", "कहाँ", "पता", "कार्यालय"]
+        has_ngp = "nextgenpro" in q or "next gen pro" in q or "nextgen" in q
+        loc_words = ["location", "where is", "where are", "address", "situated", "place", "office", "headquarter", "station", "complex", "located"]
         return has_ngp and any(w in q for w in loc_words)
 
     def _is_nextgenpro_query(self, query: str) -> bool:
@@ -196,9 +144,7 @@ class LLMEngine:
             r"\btell me about next gen pro\b", r"\babout nextgenpro\b", r"\babout next gen pro\b",
             r"\bwho is nextgenpro\b", r"\bwho is next gen pro\b", r"\bnextgenpro innovations\b",
             r"\bwhat does nextgenpro do\b", r"\bwhat does next gen pro do\b", r"\bnextgenpro\b",
-            r"\bnext gen pro\b",
-            r"നെക്സ്റ്റ്ജെൻപ്രോ", r"നെക്സ്റ്റ്\s*ജെൻ\s*പ്രോ", r"നെക്സ്റ്റ്ജെൻ",
-            r"नेक्स्टजेनप्रो"
+            r"\bnext gen pro\b"
         ]
         return any(re.search(pat, q) for pat in patterns)
 
@@ -207,85 +153,64 @@ class LLMEngine:
         Check if user asked about the Chief Minister of Kerala.
         """
         q = query.lower().strip()
-        has_kerala = "kerala" in q or "കേരള" in q or "केरल" in q
-        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q or "മുഖ്യമന്ത്രി" in q or "मुख्यमंत्री" in q
-        return (has_kerala and has_cm) or "മുഖ്യമന്ത്രി" in q
+        has_kerala = "kerala" in q
+        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q
+        return has_kerala and has_cm
 
     def generate_response(self, user_prompt: str, visual_context: str = None, forced_lang: str = None) -> str:
         """
-        Generate answer for user prompt with strict multilingual mirroring:
-        - Human speaks English -> IVIA answers strictly in English
-        - Human speaks Malayalam -> IVIA answers strictly in Malayalam script
+        Generate answer for user prompt strictly in English.
         """
         prompt = user_prompt.strip()
         if not prompt:
             return ""
 
-        # Strictly prioritize the language detected by STT ('en' or 'ml')
-        lang = "ml" if (forced_lang == "ml" or (not forced_lang and self._detect_lang(prompt) == "ml")) else "en"
-
-        # 1. Enforce Greeting query ONLY IF it is a standalone greeting (e.g. "Hello", "Hi IVIA", "Namaskaram")
+        # 1. Enforce Greeting query ONLY IF it is a standalone greeting (e.g. "Hello", "Hi IVIA")
         if self._is_greeting_query(prompt):
-            resp = GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
-            print(f"[LLM] Triggered Greeting Response ({lang}): '{resp}'")
-            return resp
+            print(f"[LLM] Triggered Greeting Response: '{GREETING_RESPONSE}'")
+            return GREETING_RESPONSE
 
         # Strip polite robot address prefix if present (e.g. "Hello IVIA, what is...", "Hi, tell me...", "IVIA, who is...")
         active_query = self._strip_leading_address(prompt)
         is_know_q = self._is_do_you_know_query(active_query)
 
-        know_prefix = ""
-        if is_know_q:
-            if lang == "ml":
-                know_prefix = "അതെ, എനിക്കറിയാം. "
-            else:
-                know_prefix = "Yes, I know. "
+        know_prefix = "Yes, I know. " if is_know_q else ""
 
         # 2. Enforce strict identity response ONLY when asking about IVIA itself
         if self._is_identity_query(active_query):
-            resp = IDENTITY_RESPONSE_ML if lang == "ml" else IDENTITY_RESPONSE
-            print(f"[LLM] Triggered Identity Response ({lang}): '{resp}'")
-            return resp
+            print(f"[LLM] Triggered Identity Response: '{IDENTITY_RESPONSE}'")
+            return IDENTITY_RESPONSE
 
         # 3. Kerala CM query
         if self._is_kerala_cm_query(active_query):
-            base = KERALA_CM_RESPONSE_ML if lang == "ml" else KERALA_CM_RESPONSE
-            resp = f"{know_prefix}{base}"
-            print(f"[LLM] Triggered Kerala CM Response ({lang}): '{resp}'")
+            resp = f"{know_prefix}{KERALA_CM_RESPONSE}"
+            print(f"[LLM] Triggered Kerala CM Response: '{resp}'")
             return resp
 
         # 4. NextGenPro location query
         if self._is_nextgenpro_location_query(active_query):
-            base = NEXTGENPRO_LOCATION_RESPONSE_ML if lang == "ml" else NEXTGENPRO_LOCATION_RESPONSE
-            resp = f"{know_prefix}{base}"
-            print(f"[LLM] Triggered NextGenPro Location Response ({lang}): '{resp}'")
+            resp = f"{know_prefix}{NEXTGENPRO_LOCATION_RESPONSE}"
+            print(f"[LLM] Triggered NextGenPro Location Response: '{resp}'")
             return resp
 
         # 5. NextGenPro general query
         if self._is_nextgenpro_query(active_query):
-            base = NEXTGENPRO_RESPONSE_ML if lang == "ml" else NEXTGENPRO_RESPONSE
-            resp = f"{know_prefix}{base}"
-            print(f"[LLM] Triggered NextGenPro Response ({lang}): '{resp}'")
+            resp = f"{know_prefix}{NEXTGENPRO_RESPONSE}"
+            print(f"[LLM] Triggered NextGenPro Response: '{resp}'")
             return resp
 
         # 6. Intercept isolated corporate tokens from noise hallucinations
         clean_p = re.sub(r"[^\w\s]", "", active_query.lower()).strip()
         if clean_p in ["edupark", "edupark private limited", "ivia"]:
             print(f"[LLM] Suppressed unprompted corporate hallucination: '{active_query}'")
-            return GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
+            return GREETING_RESPONSE
 
         # Add active user prompt to conversation history
         self.conversation_history.append({"role": "user", "content": active_query})
         if len(self.conversation_history) > 6:
             self.conversation_history = self.conversation_history[-6:]
 
-        # Enforce strict binary language mirroring instruction
-        if lang == "ml":
-            lang_rule = "MANDATORY TWO-LANGUAGE POLICY: The human spoke in MALAYALAM (മലയാളം). You MUST reply strictly in natural fluent MALAYALAM SCRIPT (മലയാളം). Never use English or any other language. Reply in strictly 1 short sentence."
-        else:
-            lang_rule = "MANDATORY TWO-LANGUAGE POLICY: The human spoke in ENGLISH. You MUST reply strictly in natural ENGLISH. Never use Malayalam or any other language. Reply in strictly 1 short sentence."
-
-        system_content = f"{SYSTEM_PROMPT}\n\n{lang_rule}"
+        system_content = f"{SYSTEM_PROMPT}\n\nMANDATORY: Reply strictly in natural, fluent English. Keep your answer strictly to 1 crisp sentence."
         if visual_context:
             system_content += f"\n\n[LIVE ROBOT VISION TELEMETRY]:\n{visual_context}"
 
@@ -298,9 +223,9 @@ class LLMEngine:
 
         messages = [{"role": "system", "content": system_content}] + history_messages
 
-        # 4. Query Groq (Ultra-fast LLM response < 500ms)
+        # Query Groq (Ultra-fast LLM response < 200ms)
         if self.groq_client:
-            candidate_models = [GROQ_MODEL] + [m for m in ["qwen/qwen3.8-27b", "allam-2-7b", "openai/gpt-oss-120b"] if m != GROQ_MODEL]
+            candidate_models = [GROQ_MODEL] + [m for m in ["allam-2-7b"] if m != GROQ_MODEL]
             for model_candidate in candidate_models:
                 try:
                     response = self.groq_client.chat.completions.create(
@@ -310,68 +235,38 @@ class LLMEngine:
                         temperature=0.4
                     )
                     answer = response.choices[0].message.content.strip()
-                    # Clean up formatting for spoken delivery and ensure 'Yes, I know' prefix if asked
-                    answer = self._finalize_answer(answer, is_know_q, lang)
+                    answer = self._finalize_answer(answer, is_know_q)
                     self.conversation_history.append({"role": "assistant", "content": answer})
                     return answer
                 except Exception as e:
                     print(f"[LLM - Groq] Model '{model_candidate}' failed: {e}")
 
-        # 5. Query Gemini / Google AI (Fallback)
-        if GEMINI_API_KEY:
-            for gemini_cand in [GEMINI_MODEL, "gemma-4-26b-a4b-it", "gemma-4-31b-it"]:
-                try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_cand}:generateContent?key={GEMINI_API_KEY}"
-                    payload = {
-                        "contents": [{"parts": [{"text": f"{SYSTEM_PROMPT}\n\nUser Question: {prompt}"}]}],
-                        "generationConfig": {"maxOutputTokens": 200, "temperature": 0.7}
-                    }
-                    resp = requests.post(url, json=payload, timeout=8)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        candidates = data.get('candidates', [])
-                        if candidates and 'content' in candidates[0]:
-                            parts = candidates[0]['content'].get('parts', [])
-                            if parts:
-                                answer = parts[0].get('text', '').strip()
-                                answer = self._finalize_answer(answer, is_know_q, lang)
-                                self.conversation_history.append({"role": "assistant", "content": answer})
-                                return answer
-                    else:
-                        print(f"[LLM - Gemini] Model '{gemini_cand}' status {resp.status_code}")
-                except Exception as e:
-                    print(f"[LLM - Gemini] Request failed: {e}")
-
-        # 6. Query OpenAI (Fallback)
+        # Query OpenAI (Fallback)
         if self.openai_client:
             try:
                 response = self.openai_client.chat.completions.create(
                     model=OPENAI_MODEL,
                     messages=messages,
-                    max_tokens=200,
-                    temperature=0.7
+                    max_tokens=45,
+                    temperature=0.4
                 )
                 answer = response.choices[0].message.content.strip()
-                answer = self._finalize_answer(answer, is_know_q, lang)
+                answer = self._finalize_answer(answer, is_know_q)
                 self.conversation_history.append({"role": "assistant", "content": answer})
                 return answer
             except Exception as e:
                 print(f"[LLM - OpenAI] Request failed: {e}")
 
-        # 7. Offline Fallback if API keys aren't added yet
-        offline_resp = self._offline_fallback(prompt, visual_context)
-        return self._finalize_answer(offline_resp, is_know_q, lang)
+        # Offline Fallback if APIs are unreachable
+        offline_resp = self._offline_fallback(active_query, visual_context)
+        return self._finalize_answer(offline_resp, is_know_q)
 
-    def _finalize_answer(self, text: str, is_know_q: bool, lang: str = "en") -> str:
+    def _finalize_answer(self, text: str, is_know_q: bool) -> str:
         clean = self._clean_for_speech(text)
         if is_know_q:
-            if lang == "ml":
-                if not clean.startswith("അതെ") and "എനിക്കറിയാം" not in clean[:30]:
-                    clean = f"അതെ, എനിക്കറിയാം. {clean}"
-            else:
-                low = clean.lower()
-                if not low.startswith("yes, i know") and not low.startswith("yes i know"):
-                    clean = f"Yes, I know. {clean}"
+            low = clean.lower()
+            if not low.startswith("yes, i know") and not low.startswith("yes i know"):
+                clean = f"Yes, I know. {clean}"
         return clean
 
     def _clean_for_speech(self, text: str) -> str:
@@ -380,16 +275,12 @@ class LLMEngine:
         text = text.replace("\u201c", '"').replace("\u201d", '"')
         text = text.replace("\u2026", "...")
         text = re.sub(r"[\*\_#`]", "", text)
-        # Strip trailing "thank you" / "thanks" if appended at the end
         text = re.sub(r"([?.!])?\s*(?:thank\s+you|thanks)(?:\s+(?:very\s+much|so\s+much))?[\.\!\?]*$", r"\1", text, flags=re.IGNORECASE)
         text = re.sub(r",\s*$", "", text)
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
     def _offline_fallback(self, prompt: str, visual_context: str = None) -> str:
-        """
-        Convenient offline responses when testing without an API key.
-        """
         p = prompt.lower()
         if self._is_vision_query(prompt):
             if visual_context:
@@ -401,8 +292,8 @@ class LLMEngine:
         if "hello" in p or "hi" in p or "hey" in p:
             return GREETING_RESPONSE
         if "how are you" in p:
-            return "I am functioning at peak efficiency and ready to assist you! What would you like to explore?"
+            return "I am functioning at peak efficiency and ready to assist you!"
         if "time" in p:
             return "Time is a fascinating concept. In my digital world, every moment is an opportunity to learn something new!"
         
-        return f"I heard your question about '{prompt}'. Please configure your GROQ or OpenAI API key in the environment file so I can answer all questions about the world."
+        return f"I heard your question about '{prompt}'. Please check your network and API keys to connect to my full intelligence."

@@ -33,9 +33,8 @@ class STTEngine:
         """
         Phonetic normalization to fix common Whisper misinterpretations of the robot name and organization:
         - 'Ivy', 'Via', 'Iviah', 'Eva', 'Ivey' -> 'IVIA'
-        - 'ഐവി', 'ഇവിയ', 'ഇവ്യ' -> 'ഐവിയ'
         - 'Next Gen Pro', 'Neck gen pro' -> 'NextGenPro'
-        - 'Edu Park', 'Edupark' -> 'EduPark'
+        - 'Edu Park', 'Eduparc' -> 'EduPark'
         """
         if not text:
             return ""
@@ -43,12 +42,9 @@ class STTEngine:
         t = text
         # English variations of IVIA
         t = re.sub(r"\b(?:ivy|i\s*via|ivia[h]?|ivey|eyvia|ayvia|eva)\b", "IVIA", t, flags=re.IGNORECASE)
-        # Malayalam script variations of IVIA
-        t = re.sub(r"\b(?:ഐവി|ഇവിയ|ഇവ്യ|ഐവിയാ)\b", "ഐവിയ", t)
 
         # NextGenPro variations
         t = re.sub(r"\b(?:next\s*gen\s*pro|nextgen\s*pro|neck\s*gen\s*pro|next\s*gen)\b", "NextGenPro", t, flags=re.IGNORECASE)
-        t = re.sub(r"\b(?:നെക്സ്റ്റ്\s*ജെൻ\s*പ്രോ|നെക്സ്റ്റ്\s*ജെൻപ്രോ)\b", "നെക്സ്റ്റ്ജെൻപ്രോ", t)
 
         # EduPark variations
         t = re.sub(r"\b(?:edu\s*park|eduparc)\b", "EduPark", t, flags=re.IGNORECASE)
@@ -65,8 +61,8 @@ class STTEngine:
 
         t = text.strip()
 
-        # Reject transcripts with no readable words (e.g. '.', '...', '!')
-        if not re.search(r"[\w\u0D00-\u0D7F\u0900-\u097F\u0B80-\u0BFF]", t):
+        # Reject transcripts with no readable words
+        if not re.search(r"[a-zA-Z0-9]", t):
             return ""
 
         # Standalone hallucinated phrases produced by Whisper on silence or background noise
@@ -92,8 +88,6 @@ class STTEngine:
                 return ""
 
         # Remove trailing "thank you" / "thanks" captured at the end of an utterance
-        # e.g., "What is the time? Thank you." -> "What is the time?"
-        # "Hello IVIA, thank you." -> "Hello IVIA"
         trailing_patterns = [
             r"([?.!])?\s*(?:thank\s+you|thanks)(?:\s+(?:very\s+much|so\s+much|a\s+lot|for\s+watching|for\s+listening))?[\.\!\?]*$",
             r"([?.!])?\s*(?:thanks|thank\s+you)\s+for\s+(?:watching|listening)[\.\!\?]*$",
@@ -106,9 +100,8 @@ class STTEngine:
 
     def transcribe(self, wav_bytes: bytes) -> tuple[str, str]:
         """
-        Transcribes audio bytes into text and detects user language.
-        Returns: (transcript_text, detected_language)
-        Where detected_language is strictly 'en', 'ml', or 'hi'.
+        Transcribes audio bytes into English text using Whisper.
+        Returns: (transcript_text, "en")
         """
         if not wav_bytes or len(wav_bytes) < 1000:
             return "", "en"
@@ -116,91 +109,24 @@ class STTEngine:
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
-        # Prime Whisper's vocabulary and spelling for robot persona, brand names, and Malayalam phonetics
-        whisper_context = "IVIA, humanoid companion robot by NextGenPro Innovations, EduPark, Ernakulam, Kerala. നമസ്കാരം, സുഖമാണോ, പേരെന്താണ്, ആരാണ്."
-        detected_lang = "en"
-        text = ""
+        # Prime Whisper's vocabulary and spelling for robot persona and brand names
+        whisper_context = "IVIA, humanoid companion robot by NextGenPro Innovations, EduPark, Ernakulam, Kerala."
 
-        # 1. Try Groq STT (Extremely fast, < 300ms)
+        # 1. Try Groq STT (Extremely fast, < 200ms)
         if self.groq_client:
             try:
-                # First pass: transcribe with acoustic language detection (verbose_json)
                 response = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
+                    language="en",
                     temperature=0.0,
-                    prompt=whisper_context,
-                    response_format="verbose_json"
+                    prompt=whisper_context
                 )
-                raw_lang = (getattr(response, "language", "") or "").lower()
-                text = response.text.strip()
-
-                has_ml_script = any('\u0D00' <= c <= '\u0D7F' for c in text)
-                manglish_patterns = [
-                    r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\bperentha\b",
-                    r"\bperu\s+entha\b", r"\baaranu\b", r"\baaraanu\b", r"\bariyumo\b",
-                    r"\bparayumo\b", r"\bevide\w*\b", r"\benthokke\w*\b", r"\bmalayalam\b",
-                    r"\bnjan\b", r"\bninte\b", r"\bningal\w*\b", r"\bcheyyunne\b",
-                    r"\benthanu\b", r"\benthaa\b", r"\baarokke\b"
-                ]
-                has_manglish = any(re.search(pat, text, re.IGNORECASE) for pat in manglish_patterns)
-                has_english_words = bool(re.search(r"[a-zA-Z]{2,}", text)) and not has_manglish
-
-                # Robust Language Resolution:
-                # 1. Native Malayalam characters present -> strictly Malayalam
-                if has_ml_script:
-                    detected_lang = "ml"
-                # 2. Manglish spoken -> re-transcribe with language='ml' to get native Malayalam script
-                elif has_manglish:
-                    detected_lang = "ml"
-                    audio_file.seek(0)
-                    r_ml = self.groq_client.audio.transcriptions.create(
-                        model=GROQ_STT_MODEL,
-                        file=audio_file,
-                        language="ml",
-                        temperature=0.0,
-                        prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
-                    )
-                    text = r_ml.text.strip()
-                # 3. Clear English words present -> NEVER overwrite with Malayalam, preserve English as-is!
-                elif has_english_words:
-                    detected_lang = "en"
-                # 4. Text was empty but acoustic language flagged Malayalam/Indic -> try forced Malayalam pass
-                elif not text and raw_lang in ["malayalam", "tamil", "telugu"]:
-                    detected_lang = "ml"
-                    audio_file.seek(0)
-                    r_ml = self.groq_client.audio.transcriptions.create(
-                        model=GROQ_STT_MODEL,
-                        file=audio_file,
-                        language="ml",
-                        temperature=0.0,
-                        prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
-                    )
-                    text = r_ml.text.strip()
-                else:
-                    detected_lang = "en"
-
+                text = (response.text or "").strip()
                 cleaned = self.normalize_robot_names(self.clean_transcript(text))
                 if cleaned:
-                    print(f"[STT] Detected Lang: >> {detected_lang.upper()} << | Transcript: '{cleaned}'")
-                    return cleaned, detected_lang
-
-                # Second pass fallback if auto pass returned empty
-                audio_file.seek(0)
-                fallback_lang = "ml" if raw_lang in ["malayalam", "tamil", "telugu"] else "en"
-                fb_prompt = "നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ" if fallback_lang == "ml" else whisper_context
-                r_fallback = self.groq_client.audio.transcriptions.create(
-                    model=GROQ_STT_MODEL,
-                    file=audio_file,
-                    language=fallback_lang,
-                    temperature=0.0,
-                    prompt=fb_prompt
-                )
-                cleaned_fb = self.normalize_robot_names(self.clean_transcript(r_fallback.text.strip()))
-                if cleaned_fb:
-                    print(f"[STT Fallback] Detected Lang: >> {fallback_lang.upper()} << | Transcript: '{cleaned_fb}'")
-                    return cleaned_fb, fallback_lang
-
+                    print(f"[STT] Transcript: '{cleaned}'")
+                    return cleaned, "en"
                 return "", "en"
             except Exception as e:
                 print(f"[STT - Groq] Transcription error: {e}")
@@ -212,19 +138,17 @@ class STTEngine:
                 response = self.openai_client.audio.transcriptions.create(
                     model=OPENAI_STT_MODEL,
                     file=audio_file,
+                    language="en",
                     prompt=whisper_context
                 )
-                text = response.text.strip()
+                text = (response.text or "").strip()
                 cleaned = self.normalize_robot_names(self.clean_transcript(text))
                 if cleaned:
-                    lang = "ml" if any('\u0D00' <= c <= '\u0D7F' for c in cleaned) else "en"
-                    print(f"[STT - OpenAI] Detected Lang: >> {lang.upper()} << | Transcript: '{cleaned}'")
-                    return cleaned, lang
-                else:
-                    return "", "en"
+                    print(f"[STT - OpenAI] Transcript: '{cleaned}'")
+                    return cleaned, "en"
+                return "", "en"
             except Exception as e:
                 print(f"[STT - OpenAI] Transcription failed: {e}")
 
-        # 3. Informative fallback if no API key is provided
         print("[STT] No active API key found for Groq or OpenAI.")
         return "", "en"
