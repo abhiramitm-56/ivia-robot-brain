@@ -10,6 +10,9 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - ./server:/app/server
+      - ./.env:/app/.env
     env_file:
       - .env
     environment:

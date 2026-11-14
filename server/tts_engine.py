@@ -79,6 +79,9 @@ class TTSEngine:
                 text = re.sub(r"\bEduPark\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
                 text = re.sub(r"\bEdu\s*Park\b", EDUPARK_PHONETIC, text, flags=re.IGNORECASE)
                 text = re.sub(r"\bNextGenPro\b", NEXTGENPRO_PHONETIC, text, flags=re.IGNORECASE)
+                # Phonetic fix for Kerala CM so TTS pronounces "Vee Dee Satheeshan" naturally and smoothly
+                text = re.sub(r"\bV\.?\s*D\.?\s*Satheesh?an\b", "Vee Dee Satheeshan", text, flags=re.IGNORECASE)
+                text = re.sub(r"\bV\.?\s*D\.?\b", "Vee Dee", text)
         return text
 
     async def synthesize_to_pcm(self, text: str, target_lang: str = None) -> bytes:

@@ -106,30 +106,34 @@ class STTEngine:
                 raw_lang = (getattr(response, "language", "") or "").lower()
                 text = response.text.strip()
 
-                # Determine if speech is Malayalam/Indic
-                is_malayalam = (
-                    raw_lang in ["malayalam", "tamil", "telugu", "kannada"]
-                    or any('\u0D00' <= c <= '\u0D7F' for c in text)
-                    or any(w in text.lower() for w in [
-                        "namaskar", "sukham", "sugham", "perentha", "ninte", "evide",
-                        "aaranu", "aaraanu", "ariyumo", "parayumo", "enthokke", "malayalam",
-                        "njan", "ningal", "cheyyunne"
-                    ])
-                )
-                is_hindi = raw_lang == "hindi" or any('\u0900' <= c <= '\u097F' for c in text)
+                # Determine language strictly:
+                # 1. Malayalam if contains Malayalam script OR strong Manglish tokens
+                has_ml_script = any('\u0D00' <= c <= '\u0D7F' for c in text)
+                has_manglish_words = any(w in text.lower() for w in [
+                    "namaskar", "sukham", "sugham", "perentha", "ninte", "evide",
+                    "aaranu", "aaraanu", "ariyumo", "parayumo", "enthokke",
+                    "njan", "ningal", "cheyyunne"
+                ])
+                is_malayalam = has_ml_script or ((raw_lang in ["malayalam", "ml"]) and has_manglish_words) or has_manglish_words
+                is_hindi = (raw_lang == "hindi" or any('\u0900' <= c <= '\u097F' for c in text)) and not is_malayalam
 
                 if is_malayalam:
                     detected_lang = "ml"
-                    # If text doesn't contain native Malayalam characters yet, re-transcribe with forced language='ml'
-                    if not any('\u0D00' <= c <= '\u0D7F' for c in text):
-                        audio_file.seek(0)
-                        r_ml = self.groq_client.audio.transcriptions.create(
-                            model=GROQ_STT_MODEL,
-                            file=audio_file,
-                            language="ml",
-                            temperature=0.0
-                        )
-                        text = r_ml.text.strip()
+                    # If text doesn't contain native Malayalam characters yet and was detected as Malayalam, try re-transcribing with language='ml'
+                    if not has_ml_script and (raw_lang in ["malayalam", "ml"]):
+                        try:
+                            audio_file.seek(0)
+                            r_ml = self.groq_client.audio.transcriptions.create(
+                                model=GROQ_STT_MODEL,
+                                file=audio_file,
+                                language="ml",
+                                temperature=0.0
+                            )
+                            ml_text = r_ml.text.strip()
+                            if ml_text and any('\u0D00' <= c <= '\u0D7F' for c in ml_text):
+                                text = ml_text
+                        except Exception:
+                            pass
                 elif is_hindi:
                     detected_lang = "hi"
                 else:
@@ -139,19 +143,6 @@ class STTEngine:
                 if cleaned:
                     print(f"[STT] Detected Lang: >> {detected_lang.upper()} << | Transcript: '{cleaned}'")
                     return cleaned, detected_lang
-
-                # Second pass fallback if auto pass returned empty
-                audio_file.seek(0)
-                r_fallback = self.groq_client.audio.transcriptions.create(
-                    model=GROQ_STT_MODEL,
-                    file=audio_file,
-                    language="ml",
-                    temperature=0.0
-                )
-                cleaned_fb = self.clean_transcript(r_fallback.text.strip())
-                if cleaned_fb:
-                    print(f"[STT Fallback] Detected Lang: >> ML << | Transcript: '{cleaned_fb}'")
-                    return cleaned_fb, "ml"
 
                 return "", "en"
             except Exception as e:

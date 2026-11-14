@@ -70,17 +70,27 @@ class LLMEngine:
 
     def _is_greeting_query(self, query: str) -> bool:
         """
-        Check if the user is saying hello or general greeting in English, Malayalam (Native & Manglish), or Hindi.
+        Check if the user is saying hello or general greeting without a subsequent question.
         """
         q = query.lower().strip()
-        patterns = [
-            r"^hello\b", r"^hi\b", r"^hey\b", r"^greetings\b", r"^good\s+morning\b",
-            r"^good\s+afternoon\b", r"^good\s+evening\b",
-            r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ", r"സുഖമാണ്",
-            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\benthokkeyundu\b",
-            r"नमस्ते", r"नमस्कार", r"प्रणाम", r"हेलो"
+        clean = re.sub(r"[^\w\s\u0D00-\u0D7F\u0900-\u097F]", "", q).strip()
+        words = clean.split()
+        
+        greetings = [
+            "hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening",
+            "hello ivia", "hi ivia", "hey ivia",
+            "നമസ്കാരം", "ഹലോ", "ഹായ്", "സുഖമാണോ", "സുഖമാണ്", "എന്തൊക്കെയുണ്ട്",
+            "namaskar", "namaskaram", "sukham", "sugham", "sukhamano", "sughamano", "enthokkeyundu",
+            "नमस्ते", "नमस्कार", "प्रणाम", "हेलो"
         ]
-        return any(re.search(pat, q) for pat in patterns)
+        if clean in greetings:
+            return True
+            
+        # Match short greetings <= 3 words (e.g., "Hello IVIA", "ഹലോ ഐവിയ")
+        if len(words) <= 3 and any(clean.startswith(g) for g in ["hello", "hi", "hey", "നമസ്കാരം", "ഹലോ", "namaskar", "नमस्ते"]):
+            return True
+            
+        return False
 
     def _is_identity_query(self, query: str) -> bool:
         """
@@ -91,11 +101,13 @@ class LLMEngine:
             r"\bwho are you\b", r"\bintroduce yourself\b", r"\bintroduce\b", r"\bintroduction\b",
             r"\bwhat is your name\b", r"\bwho created you\b", r"\bwho made you\b",
             r"\bwho developed you\b", r"\btell me about yourself\b", r"\bwhat are you\b",
-            r"\byour name\b",
+            r"\byour name\b", r"\bwhat is your identity\b",
+            r"\bwho is ivia\b", r"\bwhat is ivia\b",
             r"\bperentha\b", r"\bperu\s+entha\b", r"\baaranu\s+nee\b", r"\baaraanu\s+nee\b",
-            r"\bninne\s+aara\b", r"\baaranu\b", r"\baaraanu\b", r"\bmalayalam\s+ariyumo\b",
-            r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
-            r"പേരം\s*ദാണ്", r"പേരം\s*താണ", r"പേര്", r"ആരാണ്",
+            r"\bninne\s+aara\b", r"\bninne\s+aaranu\b", r"\bninte\s+peru\b",
+            r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"നിങ്ങൾ\s*ആരാണ്",
+            r"നിന്റെ\s*പേര്", r"നിങ്ങളുടെ\s*പേര്", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
+            r"നിന്നെ\s*ഉണ്ടാക്കിയത്\s*ആരാണ്", r"നിങ്ങളെ\s*ഉണ്ടാക്കിയത്\s*ആരാണ്",
             r"तुम\s*कौन\s*हो", r"आप\s*कौन\s*हैं", r"तुम्हारा\s*नाम\s*क्या\s*है"
         ]
         return any(re.search(pat, q) for pat in patterns)
@@ -170,8 +182,8 @@ class LLMEngine:
         """
         q = query.lower().strip()
         has_kerala = "kerala" in q or "കേരള" in q or "केरल" in q
-        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q or "മുഖ്യമന്ത്രി" in q or "मुख्यमंत्री" in q
-        return (has_kerala and has_cm) or "മുഖ്യമന്ത്രി" in q
+        has_cm = "cm" in q or "chief minister" in q or "chiefminister" in q or "മുഖ്യമന്ത്രി" in q or "मुख्यमंत्री" in q or "satheeshan" in q or "satheesan" in q
+        return (has_kerala and has_cm) or "മുഖ്യമന്ത്രി" in q or "chief minister of kerala" in q or "cm of kerala" in q or "kerala cm" in q or "satheeshan" in q
 
     def generate_response(self, user_prompt: str, visual_context: str = None, forced_lang: str = None) -> str:
         """
@@ -235,8 +247,13 @@ class LLMEngine:
             print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
             return GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
 
+        # Strip polite greeting prefix if followed by a question
+        prompt_query = re.sub(r"^(?:hello|hi|hey|നമസ്കാരം|namaskaram)\s*[,!\.]*\s*", "", prompt, flags=re.IGNORECASE).strip()
+        if not prompt_query:
+            prompt_query = prompt
+
         # Add user prompt to conversation history
-        self.conversation_history.append({"role": "user", "content": prompt})
+        self.conversation_history.append({"role": "user", "content": prompt_query})
         if len(self.conversation_history) > 6:
             self.conversation_history = self.conversation_history[-6:]
 
@@ -263,7 +280,7 @@ class LLMEngine:
 
         # 4. Query Groq (Ultra-fast LLM response < 500ms)
         if self.groq_client:
-            candidate_models = [GROQ_MODEL] + [m for m in ["qwen/qwen3.8-27b", "allam-2-7b", "openai/gpt-oss-120b"] if m != GROQ_MODEL]
+            candidate_models = [GROQ_MODEL] + [m for m in ["llama-3.1-8b-instant", "allam-2-7b", "llama-3.3-70b-versatile", "qwen/qwen3.8-27b"] if m != GROQ_MODEL]
             for model_candidate in candidate_models:
                 try:
                     response = self.groq_client.chat.completions.create(

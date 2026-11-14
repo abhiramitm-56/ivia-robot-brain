@@ -27,7 +27,7 @@ IDENTITY_RESPONSE = "I am IVIA, your humanoid companion developed by NextGenPro 
 GREETING_RESPONSE = "I am IVIA, how can I assist you?"
 NEXTGENPRO_RESPONSE = "NextGenPro, built on more than 16 years of industry experience, NextGenPro delivers enterprise software, AI, Robotics, IoT, and digital solutions that empower businesses to innovate, transform, and grow. NextGenPro's location is JR Complex, Near Palarivattom Metro Station, Ernakulam."
 NEXTGENPRO_LOCATION_RESPONSE = "NextGenPro is located at JR Complex, Near Palarivattom Metro Station, Ernakulam."
-KERALA_CM_RESPONSE = "The Chief Minister of Kerala is V. D. Satheesan."
+KERALA_CM_RESPONSE = "The Chief Minister of Kerala is V. D. Satheeshan."
 
 # Malayalam Persona Responses (മലയാളം)
 IDENTITY_RESPONSE_ML = "ഞാൻ നെക്സ്റ്റ്ജെൻപ്രോ ഇന്നൊവേഷൻസും എഡ്യൂപാർക്കും വികസിപ്പിച്ച ഐവിയ എന്ന ഹ്യൂമനോയിഡ് റോബോട്ട് ആണ്."
@@ -55,7 +55,7 @@ CRITICAL RULES:
    - Spoken responses MUST be strictly 1 crisp, natural sentence (maximum 15-20 words). Never output paragraphs.
 3. KNOWLEDGE BASE:
    - NextGenPro: 16+ years experience, JR Complex, Near Palarivattom Metro Station, Ernakulam.
-   - Kerala CM: V. D. Satheesan.
+   - Kerala CM: V. D. Satheeshan.
    - You have deep regional expertise on Kerala, its 14 districts, culture, and India.
 4. NO FORMATTING:
    - Never use asterisks, markdown, bullet points, or emojis, as they break spoken delivery."""
@@ -105,6 +105,6 @@ CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
 # Voice Activity Detection (VAD) - Ultra-Low Latency Conversational Turn-Taking
-SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 450))  # RMS energy threshold for speech trigger
+SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 420))  # RMS energy threshold for speech trigger
 SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.55)) # 0.55s silence gives snappy response without chopping words
 MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
