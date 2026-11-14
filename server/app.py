@@ -227,21 +227,21 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
                             except Exception:
                                 pass
 
-                            # Run STT in threadpool (strictly detects user language)
+                            # Run STT in threadpool (Pure English)
                             user_text, detected_lang = await asyncio.to_thread(stt_engine.transcribe, wav_data)
                             if user_text:
-                                print(f"[Speech In] Detected Language: >> {detected_lang.upper()} << | Human: '{user_text}'")
-                                await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text, "lang": detected_lang})
+                                print(f"[Speech In] Human: '{user_text}'")
+                                await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text})
                                 
-                                # Process query through LLM strictly matching user language
+                                # Process query through LLM in pure English
                                 visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
-                                answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx, detected_lang)
-                                print(f"[Speech Out ({detected_lang.upper()})] IVIA: '{answer_text}'")
-                                await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text, "lang": detected_lang})
+                                answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
+                                print(f"[Speech Out] IVIA: '{answer_text}'")
+                                await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
 
-                                # Synthesize Speech using the exact neural voice for that language
+                                # Synthesize Speech using Edge-TTS English voice
                                 await set_state("speaking")
-                                pcm_out = await tts_engine.synthesize_to_pcm(answer_text, detected_lang)
+                                pcm_out = await tts_engine.synthesize_to_pcm(answer_text)
                                 if pcm_out:
                                     if current_speech_task and not current_speech_task.done():
                                         current_speech_task.cancel()
