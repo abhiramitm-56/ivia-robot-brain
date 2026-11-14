@@ -69,33 +69,74 @@ class LLMEngine:
 
     def _is_greeting_query(self, query: str) -> bool:
         """
-        Check if the user is saying hello or general greeting in English or Malayalam.
+        Check if the user is saying a standalone hello or general greeting.
+        Anchored to full phrase so questions starting with 'Hello, what is...' do not get hijacked.
         """
-        q = query.lower().strip()
+        q_clean = re.sub(r"[.,!?;:\-–—\(\)\[\]\"']+", " ", query.lower()).strip()
         patterns = [
-            r"^hello\b", r"^hi\b", r"^hey\b", r"^greetings\b", r"^good\s+morning\b",
-            r"^good\s+afternoon\b", r"^good\s+evening\b",
-            r"നമസ്കാരം", r"ഹലോ", r"ഹായ്", r"സുഖമാണോ", r"സുഖമാണ്",
-            r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\benthokkeyundu\b"
+            r"^(?:hello|hi|hey|greetings)(?:\s+ivia)?$",
+            r"^(?:good\s+morning|good\s+afternoon|good\s+evening)(?:\s+ivia)?$",
+            r"^(?:how\s+are\s+you|how\s+do\s+you\s+do)(?:\s+ivia)?$",
+            r"^(?:നമസ്കാരം|ഹലോ|ഹായ്|സുഖമാണോ|സുഖമാണ്)(?:\s+ഐവിയ)?$",
+            r"^(?:namaskar\w*|sukham\w*|sugham\w*|enthokkeyundu)(?:\s+ivia)?$",
+            r"^(?:ivia|ഐവിയ)$"
         ]
-        return any(re.search(pat, q) for pat in patterns)
+        return any(re.match(pat, q_clean, flags=re.IGNORECASE) for pat in patterns)
 
     def _is_identity_query(self, query: str) -> bool:
         """
-        Check if the user is asking about IVIA's identity, creators, or introduction in English or Malayalam.
+        Check if the user is specifically asking about IVIA's identity, creators, or introduction.
+        Requires explicit self-referential targets (you/your/self) so general 'who is X' questions
+        (e.g., 'who is the PM', 'who is Gandhiji') are NOT misidentified as robot identity queries.
         """
         q = query.lower().strip()
         patterns = [
-            r"\bwho are you\b", r"\bintroduce yourself\b", r"\bintroduce\b", r"\bintroduction\b",
-            r"\bwhat is your name\b", r"\bwho created you\b", r"\bwho made you\b",
-            r"\bwho developed you\b", r"\btell me about yourself\b", r"\bwhat are you\b",
-            r"\byour name\b",
-            r"\bperentha\b", r"\bperu\s+entha\b", r"\baaranu\s+nee\b", r"\baaraanu\s+nee\b",
-            r"\bninne\s+aara\b", r"\baaranu\b", r"\baaraanu\b", r"\bmalayalam\s+ariyumo\b",
-            r"ആരാണ്\s*നീ", r"നീ\s*ആരാണ്", r"ആരാണ്\s*നിങ്ങൾ", r"പേരെന്താണ്", r"പേര്\s*എന്താണ്",
-            r"പേരം\s*ദാണ്", r"പേരം\s*താണ", r"പേര്", r"ആരാണ്"
+            # English queries specifically asking about the robot
+            r"\bwho\s+are\s+you\b",
+            r"\bwhat\s+is\s+your\s+name\b",
+            r"\bintroduce\s+yourself\b",
+            r"\btell\s+me\s+about\s+yourself\b",
+            r"\bwho\s+created\s+you\b",
+            r"\bwho\s+made\s+you\b",
+            r"\bwho\s+developed\s+you\b",
+            r"\bwhat\s+are\s+you\b",
+            r"\byour\s+name\b",
+
+            # Malayalam queries specifically asking about YOU/YOUR name
+            r"(?:നീ|നിങ്ങൾ)\s*ആരാണ്",
+            r"ആരാണ്\s*(?:നീ|നിങ്ങൾ)",
+            r"(?:നിന്റെ|നിങ്ങളുടെ)\s*പേരെന്താണ്",
+            r"(?:നിന്റെ|നിങ്ങളുടെ)\s*പേര്\s*എന്താണ്",
+            r"പേരെന്താണ്\s*(?:നിന്റെ|നിങ്ങൾക്ക്|നിനക്ക്)?",
+            r"സ്വയം\s*പരിചയപ്പെടുത്തുക",
+
+            # Manglish queries specifically targeting the robot
+            r"\baaranu\s+(?:nee|ningal)\b",
+            r"\b(?:nee|ningal)\s+aaranu\b",
+            r"\bninte\s+perentha\b",
+            r"\bninte\s+peru\s+entha\b",
+            r"\bninne\s+aara(?:anu)?\s+(?:undakkiyathu|undakkiye|undakkiyath)\b"
         ]
         return any(re.search(pat, q) for pat in patterns)
+
+    def _strip_leading_address(self, text: str) -> str:
+        """
+        If user starts with an address like 'Hello IVIA, ...' or 'Hi, ...' or 'IVIA, ...'
+        and follows with an actual question/query, strip the address so the real question
+        can be properly answered by the LLM instead of triggering a greeting.
+        """
+        t = text.strip()
+        m = re.match(
+            r"^(?:(?:hello|hi|hey|greetings|namaskaram|namaskar|നമസ്കാരം|ഹലോ|ഹായ്)(?:\s+(?:ivia|ഐവിയ|robot))?|(?:ivia|ഐവിയ|robot))[\s,:\-]+(.+)$",
+            t,
+            flags=re.IGNORECASE
+        )
+        if m:
+            rem = m.group(1).strip()
+            # If the remainder has meaningful content (at least 3 characters and not just robot name), use remainder
+            if len(rem) >= 3 and not re.match(r"^(?:ivia|ഐവിയ|robot)$", rem, re.IGNORECASE):
+                return rem
+        return t
 
     def _is_vision_query(self, query: str) -> bool:
         """
@@ -182,7 +223,16 @@ class LLMEngine:
 
         # Strictly prioritize the language detected by STT ('en' or 'ml')
         lang = "ml" if (forced_lang == "ml" or (not forced_lang and self._detect_lang(prompt) == "ml")) else "en"
-        is_know_q = self._is_do_you_know_query(prompt)
+
+        # 1. Enforce Greeting query ONLY IF it is a standalone greeting (e.g. "Hello", "Hi IVIA", "Namaskaram")
+        if self._is_greeting_query(prompt):
+            resp = GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
+            print(f"[LLM] Triggered Greeting Response ({lang}): '{resp}'")
+            return resp
+
+        # Strip polite robot address prefix if present (e.g. "Hello IVIA, what is...", "Hi, tell me...", "IVIA, who is...")
+        active_query = self._strip_leading_address(prompt)
+        is_know_q = self._is_do_you_know_query(active_query)
 
         know_prefix = ""
         if is_know_q:
@@ -191,47 +241,41 @@ class LLMEngine:
             else:
                 know_prefix = "Yes, I know. "
 
-        # 1. Enforce Greeting query
-        if self._is_greeting_query(prompt):
-            resp = GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
-            print(f"[LLM] Triggered Greeting Response ({lang}): '{resp}'")
-            return resp
-
-        # 2. Enforce strict identity response
-        if self._is_identity_query(prompt):
+        # 2. Enforce strict identity response ONLY when asking about IVIA itself
+        if self._is_identity_query(active_query):
             resp = IDENTITY_RESPONSE_ML if lang == "ml" else IDENTITY_RESPONSE
             print(f"[LLM] Triggered Identity Response ({lang}): '{resp}'")
             return resp
 
         # 3. Kerala CM query
-        if self._is_kerala_cm_query(prompt):
+        if self._is_kerala_cm_query(active_query):
             base = KERALA_CM_RESPONSE_ML if lang == "ml" else KERALA_CM_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered Kerala CM Response ({lang}): '{resp}'")
             return resp
 
         # 4. NextGenPro location query
-        if self._is_nextgenpro_location_query(prompt):
+        if self._is_nextgenpro_location_query(active_query):
             base = NEXTGENPRO_LOCATION_RESPONSE_ML if lang == "ml" else NEXTGENPRO_LOCATION_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered NextGenPro Location Response ({lang}): '{resp}'")
             return resp
 
         # 5. NextGenPro general query
-        if self._is_nextgenpro_query(prompt):
+        if self._is_nextgenpro_query(active_query):
             base = NEXTGENPRO_RESPONSE_ML if lang == "ml" else NEXTGENPRO_RESPONSE
             resp = f"{know_prefix}{base}"
             print(f"[LLM] Triggered NextGenPro Response ({lang}): '{resp}'")
             return resp
 
         # 6. Intercept isolated corporate tokens from noise hallucinations
-        clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
+        clean_p = re.sub(r"[^\w\s]", "", active_query.lower()).strip()
         if clean_p in ["edupark", "edupark private limited", "ivia"]:
-            print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
+            print(f"[LLM] Suppressed unprompted corporate hallucination: '{active_query}'")
             return GREETING_RESPONSE_ML if lang == "ml" else GREETING_RESPONSE
 
-        # Add user prompt to conversation history
-        self.conversation_history.append({"role": "user", "content": prompt})
+        # Add active user prompt to conversation history
+        self.conversation_history.append({"role": "user", "content": active_query})
         if len(self.conversation_history) > 6:
             self.conversation_history = self.conversation_history[-6:]
 
@@ -246,10 +290,10 @@ class LLMEngine:
             system_content += f"\n\n[LIVE ROBOT VISION TELEMETRY]:\n{visual_context}"
 
         history_messages = list(self.conversation_history)
-        if self._is_vision_query(prompt) and visual_context:
+        if self._is_vision_query(active_query) and visual_context:
             history_messages[-1] = {
                 "role": "user",
-                "content": f"{prompt}\n[Robot Vision Sensor reports: {visual_context}]"
+                "content": f"{active_query}\n[Robot Vision Sensor reports: {visual_context}]"
             }
 
         messages = [{"role": "system", "content": system_content}] + history_messages
