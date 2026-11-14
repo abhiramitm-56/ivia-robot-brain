@@ -135,30 +135,48 @@ class STTEngine:
                 raw_lang = (getattr(response, "language", "") or "").lower()
                 text = response.text.strip()
 
-                # Determine if speech is Malayalam (Native script or Manglish)
-                is_malayalam = (
-                    raw_lang in ["malayalam", "tamil", "telugu", "kannada"]
-                    or any('\u0D00' <= c <= '\u0D7F' for c in text)
-                    or any(w in text.lower() for w in [
-                        "namaskar", "sukham", "sugham", "perentha", "ninte", "evide",
-                        "aaranu", "aaraanu", "ariyumo", "parayumo", "enthokke", "malayalam",
-                        "njan", "ningal", "cheyyunne"
-                    ])
-                )
+                has_ml_script = any('\u0D00' <= c <= '\u0D7F' for c in text)
+                manglish_patterns = [
+                    r"\bnamaskar\w*\b", r"\bsukham\w*\b", r"\bsugham\w*\b", r"\bperentha\b",
+                    r"\bperu\s+entha\b", r"\baaranu\b", r"\baaraanu\b", r"\bariyumo\b",
+                    r"\bparayumo\b", r"\bevide\w*\b", r"\benthokke\w*\b", r"\bmalayalam\b",
+                    r"\bnjan\b", r"\bninte\b", r"\bningal\w*\b", r"\bcheyyunne\b",
+                    r"\benthanu\b", r"\benthaa\b", r"\baarokke\b"
+                ]
+                has_manglish = any(re.search(pat, text, re.IGNORECASE) for pat in manglish_patterns)
+                has_english_words = bool(re.search(r"[a-zA-Z]{2,}", text)) and not has_manglish
 
-                if is_malayalam:
+                # Robust Language Resolution:
+                # 1. Native Malayalam characters present -> strictly Malayalam
+                if has_ml_script:
                     detected_lang = "ml"
-                    # If text doesn't contain native Malayalam characters yet, re-transcribe with forced language='ml'
-                    if not any('\u0D00' <= c <= '\u0D7F' for c in text):
-                        audio_file.seek(0)
-                        r_ml = self.groq_client.audio.transcriptions.create(
-                            model=GROQ_STT_MODEL,
-                            file=audio_file,
-                            language="ml",
-                            temperature=0.0,
-                            prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
-                        )
-                        text = r_ml.text.strip()
+                # 2. Manglish spoken -> re-transcribe with language='ml' to get native Malayalam script
+                elif has_manglish:
+                    detected_lang = "ml"
+                    audio_file.seek(0)
+                    r_ml = self.groq_client.audio.transcriptions.create(
+                        model=GROQ_STT_MODEL,
+                        file=audio_file,
+                        language="ml",
+                        temperature=0.0,
+                        prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
+                    )
+                    text = r_ml.text.strip()
+                # 3. Clear English words present -> NEVER overwrite with Malayalam, preserve English as-is!
+                elif has_english_words:
+                    detected_lang = "en"
+                # 4. Text was empty but acoustic language flagged Malayalam/Indic -> try forced Malayalam pass
+                elif not text and raw_lang in ["malayalam", "tamil", "telugu"]:
+                    detected_lang = "ml"
+                    audio_file.seek(0)
+                    r_ml = self.groq_client.audio.transcriptions.create(
+                        model=GROQ_STT_MODEL,
+                        file=audio_file,
+                        language="ml",
+                        temperature=0.0,
+                        prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
+                    )
+                    text = r_ml.text.strip()
                 else:
                     detected_lang = "en"
 
@@ -169,17 +187,19 @@ class STTEngine:
 
                 # Second pass fallback if auto pass returned empty
                 audio_file.seek(0)
+                fallback_lang = "ml" if raw_lang in ["malayalam", "tamil", "telugu"] else "en"
+                fb_prompt = "നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ" if fallback_lang == "ml" else whisper_context
                 r_fallback = self.groq_client.audio.transcriptions.create(
                     model=GROQ_STT_MODEL,
                     file=audio_file,
-                    language="ml",
+                    language=fallback_lang,
                     temperature=0.0,
-                    prompt="നമസ്കാരം, സുഖമാണോ, ഐവിയ, നെക്സ്റ്റ്ജെൻപ്രോ"
+                    prompt=fb_prompt
                 )
                 cleaned_fb = self.normalize_robot_names(self.clean_transcript(r_fallback.text.strip()))
                 if cleaned_fb:
-                    print(f"[STT Fallback] Detected Lang: >> ML << | Transcript: '{cleaned_fb}'")
-                    return cleaned_fb, "ml"
+                    print(f"[STT Fallback] Detected Lang: >> {fallback_lang.upper()} << | Transcript: '{cleaned_fb}'")
+                    return cleaned_fb, fallback_lang
 
                 return "", "en"
             except Exception as e:
