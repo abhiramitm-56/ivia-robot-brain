@@ -43,7 +43,7 @@ class STTEngine:
         if not re.search(r"[a-zA-Z0-9]", t):
             return ""
 
-        # Standalone hallucinated phrases produced by Whisper on silence or background noise
+        # Standalone hallucinated phrases or single filler words produced by Whisper on silence or background noise
         hallucination_patterns = [
             r"^(?:thank\s+you|thanks)(?:\s+(?:very\s+much|so\s+much|a\s+lot))?[\.\!\?]*$",
             r"^(?:thanks|thank\s+you)\s+for\s+(?:watching|listening)[\.\!\?]*$",
@@ -55,7 +55,8 @@ class STTEngine:
             r"^edupark\s+private\s+limited[\.\!\?]*$",
             r"^nextgenpro[\.\!\?]*$",
             r"^nextgenpro\s+innovations[\.\!\?]*$",
-            r"^ivia[\.\!\?]*$"
+            r"^ivia[\.\!\?]*$",
+            r"^(?:so|um|uh|oh|ah|okay|ok|yeah|yes|right|hmm|shh|well|now|just|what|the|a|an|it|is|hey|hello|hi)[\.\!\?]*$"
         ]
         for pat in hallucination_patterns:
             if re.match(pat, t, flags=re.IGNORECASE):
@@ -83,7 +84,7 @@ class STTEngine:
         audio_file = io.BytesIO(wav_bytes)
         audio_file.name = "audio.wav"
 
-        whisper_context = "Hello. IVIA humanoid robot."
+        whisper_context = "IVIA is an intelligent humanoid robot."
 
         # 1. Try Groq STT (Extremely fast, < 250ms) with strict English language
         if self.groq_client:

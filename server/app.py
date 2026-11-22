@@ -128,6 +128,7 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
     audio_buffer = bytearray()
     preroll_buffer = deque(maxlen=35)  # Preserves ~560ms of speech onset so first syllable is never cut
     is_user_speaking = False
+    consecutive_voice_chunks = 0  # DEBOUNCE: filters out transient clicks, coughs, and noise spikes
     silence_start_time = None
     speech_start_time = None
 
@@ -156,6 +157,7 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
                     preroll_buffer.clear()
                     audio_buffer.clear()
                     is_user_speaking = False
+                    consecutive_voice_chunks = 0
                     silence_start_time = None
                     speech_start_time = None
                     continue
@@ -177,22 +179,29 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
                     print(f"[Mic Stream] State: {state_str} | RMS: {int(rms)} | Threshold: {SILENCE_THRESHOLD}")
 
                 speech_start_threshold = SILENCE_THRESHOLD
-                speech_continue_threshold = int(SILENCE_THRESHOLD * 0.75)
+                speech_continue_threshold = int(SILENCE_THRESHOLD * 0.70)
 
                 if not is_user_speaking:
                     if rms > speech_start_threshold:
-                        is_user_speaking = True
-                        is_standby = False
-                        last_interaction_time = now
-                        speech_start_time = now
-                        silence_start_time = None
-                        audio_buffer.clear()
-                        # Prepend the pre-roll audio so the start of words is never clipped!
-                        for past_chunk in preroll_buffer:
-                            audio_buffer.extend(past_chunk)
-                        await set_state("listening")
-                        print(f"[VAD] Voice detected (RMS: {int(rms)})! Listening...")
+                        consecutive_voice_chunks += 1
+                        # Voice Confirmation Debounce:
+                        # Human voice sounds sustain for > 100ms. Transient room clicks or pops last < 35ms.
+                        if consecutive_voice_chunks >= 3:
+                            is_user_speaking = True
+                            is_standby = False
+                            last_interaction_time = now
+                            speech_start_time = now - 0.1
+                            silence_start_time = None
+                            audio_buffer.clear()
+                            # Prepend the pre-roll audio so the start of words is never clipped!
+                            for past_chunk in preroll_buffer:
+                                audio_buffer.extend(past_chunk)
+                            await set_state("listening")
+                            print(f"[VAD] Human voice detected (RMS: {int(rms)})! Listening...")
+                    else:
+                        consecutive_voice_chunks = 0
                 else:
+                    consecutive_voice_chunks = 0
                     # User is actively speaking
                     audio_buffer.extend(pcm_chunk)
                     speech_duration = (now - speech_start_time)
@@ -207,14 +216,24 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
 
                     # End of speech condition: pause duration exceeded OR max speech cap (15s)
                     if silence_elapsed >= SILENCE_DURATION_SEC or speech_duration >= 15.0:
-                        print(f"[VAD] End of speech detected ({speech_duration:.1f}s speech, {silence_elapsed:.1f}s pause). Processing...")
-                        
                         is_user_speaking = False
+                        consecutive_voice_chunks = 0
                         silence_start_time = None
                         speech_start_time = None
                         last_interaction_time = now
 
-                        if speech_duration >= MIN_SPEECH_DURATION_SEC and len(audio_buffer) > 4000:
+                        # A genuine human question takes >= MIN_SPEECH_DURATION_SEC (~0.6s)
+                        if speech_duration >= MIN_SPEECH_DURATION_SEC and len(audio_buffer) >= 8000:
+                            # Verify average energy across the utterance to reject quiet ambient noise
+                            avg_rms = calculate_rms(bytes(audio_buffer))
+                            if avg_rms < speech_continue_threshold:
+                                print(f"[VAD] Discarded low-energy ambient noise (avg RMS: {int(avg_rms)}). Staying silent.")
+                                audio_buffer.clear()
+                                preroll_buffer.clear()
+                                await set_state("idle")
+                                continue
+
+                            print(f"[VAD] Speech captured ({speech_duration:.1f}s, avg RMS: {int(avg_rms)}). Processing...")
                             await set_state("processing")
                             wav_data = pcm_to_wav_bytes(bytes(audio_buffer))
                             audio_buffer.clear()
@@ -229,30 +248,39 @@ async def esp32_websocket_endpoint(websocket: WebSocket):
 
                             # Run STT in threadpool (Pure English)
                             user_text, detected_lang = await asyncio.to_thread(stt_engine.transcribe, wav_data)
-                            if user_text:
+                            if user_text and len(user_text.strip()) >= 2:
                                 print(f"[Speech In] Human: '{user_text}'")
                                 await broadcast_to_web({"event": "transcript", "role": "user", "text": user_text})
                                 
                                 # Process query through LLM in pure English
                                 visual_ctx = vision_engine.get_visual_context_summary() if vision_engine else ""
                                 answer_text = await asyncio.to_thread(llm_engine.generate_response, user_text, visual_ctx)
-                                print(f"[Speech Out] IVIA: '{answer_text}'")
-                                await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
+                                
+                                # CRITICAL: Stay completely silent if no actual answer or if prompt was noise
+                                if answer_text and answer_text.strip():
+                                    print(f"[Speech Out] IVIA: '{answer_text}'")
+                                    await broadcast_to_web({"event": "transcript", "role": "ivia", "text": answer_text})
 
-                                # Synthesize Speech using Edge-TTS English voice
-                                await set_state("speaking")
-                                pcm_out = await tts_engine.synthesize_to_pcm(answer_text)
-                                if pcm_out:
-                                    if current_speech_task and not current_speech_task.done():
-                                        current_speech_task.cancel()
-                                    current_speech_task = asyncio.create_task(stream_pcm_to_esp32(websocket, pcm_out))
+                                    # Synthesize Speech using Edge-TTS English voice
+                                    await set_state("speaking")
+                                    pcm_out = await tts_engine.synthesize_to_pcm(answer_text)
+                                    if pcm_out:
+                                        if current_speech_task and not current_speech_task.done():
+                                            current_speech_task.cancel()
+                                        current_speech_task = asyncio.create_task(stream_pcm_to_esp32(websocket, pcm_out))
+                                    else:
+                                        await set_state("idle")
                                 else:
+                                    print("[Brain] No response needed. Staying completely silent.")
                                     await set_state("idle")
                             else:
-                                print("[VAD] No discernible words detected.")
+                                print("[VAD] Suppressed noise: No genuine human question detected. Staying silent.")
                                 await set_state("idle")
                         else:
+                            # Ignored transient noise (< 0.6s)
                             audio_buffer.clear()
+                            preroll_buffer.clear()
+                            await set_state("idle")
                             await set_state("idle")
 
             elif "text" in message and message["text"]:

@@ -180,11 +180,17 @@ class LLMEngine:
             print(f"[LLM] Triggered NextGenPro Response: '{resp}'")
             return resp
 
-        # 6. Intercept isolated corporate tokens from noise hallucinations
+        # 6. Intercept isolated tokens, noise, and hallucinations -> STAY SILENT!
         clean_p = re.sub(r"[^\w\s]", "", prompt.lower()).strip()
-        if clean_p in ["edupark", "edupark private limited", "ivia"]:
-            print(f"[LLM] Suppressed unprompted corporate hallucination: '{prompt}'")
-            return GREETING_RESPONSE
+        noise_tokens = [
+            "edupark", "edupark private limited", "nextgenpro", "nextgenpro innovations",
+            "ivia", "so", "um", "uh", "oh", "ah", "yeah", "yes", "okay", "ok", "you",
+            "thank you", "thanks", "thank you very much", "thanks for watching",
+            "bye", "right", "hmm", "shh", "well", "now", "just", "the", "a", "an", "it", "is"
+        ]
+        if clean_p in noise_tokens or len(clean_p) < 2:
+            print(f"[LLM] Suppressed ambient noise/hallucination: '{prompt}'. Staying completely silent.")
+            return ""
 
         # Strip polite greeting prefix if followed by a question (e.g. "Hello, who is the prime minister")
         prompt_query = re.sub(r"^(?:hello|hi|hey)\s*[,!\.]*\s*", "", prompt, flags=re.IGNORECASE).strip()

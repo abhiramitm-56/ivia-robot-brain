@@ -83,7 +83,7 @@ SAMPLE_RATE = 16000          # 16kHz
 CHANNELS = 1                 # Mono
 BYTES_PER_SAMPLE = 2         # 16-bit PCM (2 bytes)
 
-# Voice Activity Detection (VAD) - Ultra-Low Latency Conversational Turn-Taking
-SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 420))  # RMS energy threshold for speech trigger
-SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.55)) # 0.55s silence gives snappy response without chopping words
-MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.35))
+# Voice Activity Detection (VAD) - Robust Voice Triggering (Blocks Noise, Triggers on Human Speech)
+SILENCE_THRESHOLD = int(os.getenv("SILENCE_THRESHOLD", 500))  # RMS energy threshold for speech trigger (immune to room noise)
+SILENCE_DURATION_SEC = float(os.getenv("SILENCE_DURATION_SEC", 0.65)) # 0.65s silence ensures natural sentence completion
+MIN_SPEECH_DURATION_SEC = float(os.getenv("MIN_SPEECH_DURATION_SEC", 0.60)) # Filter out transient noise spikes (< 0.6s)
